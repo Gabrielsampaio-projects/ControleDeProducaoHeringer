@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 relatorio_producao_*.xlsx
 .DS_Store
+
+Emissao.xlsx
+
+*.xlsx
