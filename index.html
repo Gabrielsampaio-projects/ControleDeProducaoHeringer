@@ -113,6 +113,7 @@ textarea{height:64px;resize:vertical}
 <script>
 const SUPABASE_URL = 'https://ovwcukyrunkhtcunyhsi.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_9A9pHfRkaAWvc2kToA6RVA_yE-TnCa9';
+const LOGO_URL = 'https://ocbgdeknqnajwrucywpx.supabase.co/storage/v1/object/public/Logo%20Heringer/Logotipo%20A%20Horizontal.png';
 
 async function sbGet(table, params=''){
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}${params}`,{headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`,'Content-Type':'application/json'}});
@@ -167,6 +168,7 @@ function renderLogin(msg=''){
     <div class="login-page">
       <div class="login-box">
         <div class="login-logo">
+          <img src="${LOGO_URL}" alt="Heringer" style="height:48px;margin-bottom:16px;">
           <h1>Controle de Produção dos Maquinários</h1>
           <p>Sequenciamento diário por máquina — PCP Heringer</p>
         </div>
@@ -220,6 +222,7 @@ function renderApp(){
     <div class="shell">
       <div class="topbar">
         <div class="logo-wrap">
+          <img src="${LOGO_URL}" alt="Heringer" style="height:34px;filter:brightness(0) invert(1);">
           <div class="logo-text">
             <div class="logo-name">Controle de Produção dos Maquinários</div>
             <div class="logo-sub">${session.maquina_nome} · Turno ${session.turno} · Supervisor: ${session.supervisor_nome}</div>
@@ -267,7 +270,15 @@ function renderForm(c){
         <div class="field"><label>Ordem de processo</label><input type="text" id="f-ordem" placeholder="Ex: 1212112"></div>
         <div class="field"><label>Produto</label><input type="text" id="f-produto" placeholder="Ex: 19.04.19 NBPT"></div>
       </div>
-      <div class="field"><label>Placa</label><input type="text" id="f-placa" placeholder="Ex: PPY5J06" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()"></div>
+      <div class="grid2">
+        <div class="field"><label>Placa</label><input type="text" id="f-placa" placeholder="Ex: PPY5J06" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()"></div>
+        <div class="field"><label>Ensaque</label>
+          <select id="f-ensaque">
+            <option value="Ensaque 1">Ensaque 1</option>
+            <option value="Ensaque 2">Ensaque 2</option>
+          </select>
+        </div>
+      </div>
       <div class="field"><label>Observação complementar (opcional)</label><textarea id="f-obs"></textarea></div>
       <button class="btn-primary" id="btn-salvar" onclick="registrar()">Iniciar produção</button>
       <div id="save-msg"></div>
@@ -291,11 +302,13 @@ function renderForm(c){
 async function registrar(){
   const payload={
     usuario_id:session.usuario_id, maquina_id:session.maquina_id, turno:session.turno, supervisor_id:session.supervisor_id,
+    operador_nome:session.nome, supervisor_nome:session.supervisor_nome, maquina_nome:session.maquina_nome,
     data:document.getElementById('f-data').value,
     hora_inicio:document.getElementById('f-hi').value,
     ordem_processo:document.getElementById('f-ordem').value.trim(),
     produto:document.getElementById('f-produto').value.trim(),
     placa:document.getElementById('f-placa').value.trim(),
+    ensaque:document.getElementById('f-ensaque').value,
     observacao:document.getElementById('f-obs').value.trim(),
     status:'em_producao',
     tipo_registro:'producao'
@@ -327,6 +340,7 @@ async function registrarParadaGeral(){
   }
   const payload={
     usuario_id:session.usuario_id, maquina_id:session.maquina_id, turno:session.turno, supervisor_id:session.supervisor_id,
+    operador_nome:session.nome, supervisor_nome:session.supervisor_nome, maquina_nome:session.maquina_nome,
     data:new Date().toISOString().split('T')[0],
     hora_inicio:nowHM(),
     cod_parada:cod,
@@ -359,7 +373,7 @@ async function renderAbertas(c){
         emProducao.map(r=>`
           <div class="row" id="row-${r.id}">
             <div class="row-head"><strong>${r.ordem_processo}</strong><span class="badge b-ok">Em produção</span><span style="font-size:11px;color:var(--text3);">início ${(r.hora_inicio||'').slice(0,5)}</span></div>
-            <div class="row-sub">${r.produto||'-'} · Placa ${r.placa||'-'}</div>
+            <div class="row-sub">${r.produto||'-'} · Placa ${r.placa||'-'}${r.ensaque?' · '+r.ensaque:''}</div>
             <div id="closebox-${r.id}"></div>
             <div class="row-actions" style="display:flex;gap:8px;margin-top:10px;">
               <button class="btn-primary" style="width:auto;background:var(--green-text);box-shadow:none;" onclick="abrirFechamento('${r.id}','produzido')">Produzido</button>
@@ -385,7 +399,7 @@ async function renderAbertas(c){
         ${paradasRecentes.map(r=>`
           <div class="row">
             <div class="row-head"><strong>${r.ordem_processo}</strong><span class="badge b-parada">Parada: ${r.cod_parada||'-'}</span><span style="font-size:11px;color:var(--text3);">parou às ${(r.hora_fim||'').slice(0,5)}</span></div>
-            <div class="row-sub">${r.produto||'-'} · Placa ${r.placa||'-'}</div>
+            <div class="row-sub">${r.produto||'-'} · Placa ${r.placa||'-'}${r.ensaque?' · '+r.ensaque:''}</div>
             <button class="btn-primary" style="width:auto;margin-top:10px;" onclick="retomarProducao('${r.id}')">Retomar produção</button>
           </div>`).join('')}
       </div>`:''}
@@ -403,14 +417,15 @@ async function encerrarParadaGeral(id){
 
 async function retomarProducao(idOrigem){
   try{
-    const rows=await sbGet('producao_apontamentos',`?id=eq.${idOrigem}&select=ordem_processo,produto,placa`);
+    const rows=await sbGet('producao_apontamentos',`?id=eq.${idOrigem}&select=ordem_processo,produto,placa,ensaque`);
     if(!rows.length) return;
     const origem=rows[0];
     const payload={
       usuario_id:session.usuario_id, maquina_id:session.maquina_id, turno:session.turno, supervisor_id:session.supervisor_id,
+      operador_nome:session.nome, supervisor_nome:session.supervisor_nome, maquina_nome:session.maquina_nome,
       data:new Date().toISOString().split('T')[0],
       hora_inicio:nowHM(),
-      ordem_processo:origem.ordem_processo, produto:origem.produto, placa:origem.placa,
+      ordem_processo:origem.ordem_processo, produto:origem.produto, placa:origem.placa, ensaque:origem.ensaque,
       status:'em_producao', tipo_registro:'producao',
       retomada_de:idOrigem
     };
@@ -477,7 +492,7 @@ async function renderHoje(c){
             ${statusBadge(r)}
             <span style="font-size:11px;color:var(--text3);">${(r.hora_inicio||'').slice(0,5)} – ${(r.hora_fim||'').slice(0,5)||'em aberto'}</span>
           </div>
-          <div class="row-sub">${r.produto||'-'} · Placa ${r.placa||'-'} · Volume: ${r.volume_produzido??'-'} · Rejeito: ${r.rejeito||'-'}</div>
+          <div class="row-sub">${r.produto||'-'} · Placa ${r.placa||'-'}${r.ensaque?' · '+r.ensaque:''} · Volume: ${r.volume_produzido??'-'} · Rejeito: ${r.rejeito||'-'}</div>
           ${r.observacao?`<div class="row-sub">Obs: ${r.observacao}</div>`:''}
         </div>`).join('')}
       </div>`;
@@ -526,21 +541,58 @@ async function renderRelatorio(c){
         <p class="section-title" style="margin-top:10px;">Todos os sequenciamentos (${rows.length})</p>
         ${!rows.length?'<div class="empty">Nenhum sequenciamento registrado ainda.</div>':
         rows.map(r=>`<div class="row">
-          <div class="row-head"><strong>${r.ordem_processo}</strong>${statusBadge(r)}<span style="font-size:11px;color:var(--text3);">${fmtDate(r.data)}</span></div>
-          <div class="row-sub">${r.produto||'-'} · Volume: ${r.volume_produzido??'-'} · Rejeito: ${r.rejeito||'-'}</div>
+          <div class="row-head"><strong>${r.ordem_processo||'Parada geral'}</strong>${statusBadge(r)}<span style="font-size:11px;color:var(--text3);">${fmtDate(r.data)} · ${(r.hora_inicio||'').slice(0,5)}–${(r.hora_fim||'').slice(0,5)||'aberto'} (${fmtDuracao(calcularDuracaoMin(r.data,r.hora_inicio,r.hora_fim))||'-'})</span></div>
+          <div class="row-sub">${r.produto||'-'}${r.ensaque?' · '+r.ensaque:''} · Volume: ${r.volume_produzido??'-'} · Rejeito: ${r.rejeito||'-'}</div>
+          <div class="row-sub">Operador: ${r.operador_nome||'-'} · Supervisor: ${r.supervisor_nome||'-'} · ${r.maquina_nome||'-'}</div>
         </div>`).join('')}
       </div>`;
   }catch(e){c.innerHTML=`<div class="alert alert-err">${icons.err}<span>Erro: ${e.message}</span></div>`}
+}
+
+function calcularDuracaoMin(data, horaInicio, horaFim){
+  if(!data || !horaInicio || !horaFim) return null;
+  const ini = new Date(`${data}T${horaInicio}:00`);
+  const fim = new Date(`${data}T${horaFim}:00`);
+  let diffMin = (fim - ini) / 60000;
+  if(diffMin < 0) diffMin += 24*60; // virou o dia
+  return diffMin;
+}
+function fmtDuracao(min){
+  if(min===null || isNaN(min)) return '';
+  const h = Math.floor(min/60);
+  const m = Math.round(min%60);
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
 }
 
 function exportExcel(){
   const rows=window._relatorioData||[];
   const wb=XLSX.utils.book_new();
   const statusLabel={em_producao:'Em produção',produzido:'Produzido',parada:'Parada'};
-  const data=rows.map(r=>({'Data':fmtDate(r.data),'Hora início':r.hora_inicio,'Hora fim':r.hora_fim||'','Status':statusLabel[r.status]||r.status,'Ordem de processo':r.ordem_processo,'Produto':r.produto,'Placa':r.placa,'Volume produzido':r.volume_produzido,'Rejeito':r.rejeito,'Cód. parada':r.cod_parada||'','Observação':r.observacao||''}));
+  const data=rows.map(r=>{
+    const duracaoMin=calcularDuracaoMin(r.data,r.hora_inicio,r.hora_fim);
+    return{
+      'Data':fmtDate(r.data),
+      'Hora início':r.hora_inicio,
+      'Hora fim':r.hora_fim||'',
+      'Duração':fmtDuracao(duracaoMin),
+      'Status':statusLabel[r.status]||r.status,
+      'Ordem de processo':r.ordem_processo||'',
+      'Produto':r.produto,
+      'Ensaque':r.ensaque||'',
+      'Placa':r.placa,
+      'Máquina':r.maquina_nome||'',
+      'Turno':r.turno||'',
+      'Operador':r.operador_nome||'',
+      'Supervisor':r.supervisor_nome||'',
+      'Volume produzido':r.volume_produzido,
+      'Rejeito':r.rejeito,
+      'Cód. parada':r.cod_parada||'',
+      'Observação':r.observacao||''
+    };
+  });
   const ws=XLSX.utils.json_to_sheet(data.length?data:[{'Sem registros':''}]);
-  ws['!cols']=[{wch:12},{wch:12},{wch:12},{wch:14},{wch:18},{wch:25},{wch:12},{wch:16},{wch:12},{wch:14},{wch:30}];
-  XLSX.utils.book_append_sheet(wb,ws,'Apontamentos');
+  ws['!cols']=[{wch:12},{wch:11},{wch:11},{wch:10},{wch:14},{wch:18},{wch:25},{wch:12},{wch:12},{wch:12},{wch:8},{wch:20},{wch:20},{wch:16},{wch:12},{wch:14},{wch:30}];
+  XLSX.utils.book_append_sheet(wb,ws,'Sequenciamentos');
   XLSX.writeFile(wb,`controle_producao_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
