@@ -218,7 +218,7 @@ async function sbPost(table, body){
 function loadSession(){try{return JSON.parse(localStorage.getItem('prod_session'))}catch(e){return null}}
 function saveSession(v){localStorage.setItem('prod_session',JSON.stringify(v))}
 
-let session=null, MAQUINAS=[], SUPERVISORES=[];
+let session=null, MAQUINAS=[], SUPERVISORES=[], PRODUTOS=[];
 
 /* ----------------------------------------------------------------
    FUNCOES AUXILIARES (formatacao de numero, data, iniciais, etc)
@@ -250,6 +250,7 @@ async function init(){
   try{
     MAQUINAS = await sbGet('producao_maquinas','?ativo=eq.true&order=nome.asc');
     SUPERVISORES = await sbGet('producao_supervisores','?ativo=eq.true&order=nome.asc');
+    PRODUTOS = await sbGet('producao_produtos','?ativo=eq.true&order=nome.asc');
   }catch(e){
     document.getElementById('root').innerHTML = `<div class="login-page"><div class="login-box"><div class="alert alert-err">${icons.err}<span>Não foi possível conectar ao banco de dados. Verifique se o script SQL já foi executado no Supabase.<br><br>Detalhe: ${e.message}</span></div></div></div>`;
     return;
@@ -282,9 +283,9 @@ function renderLogin(msg=''){
           <div class="field"><label>Maquinário</label><select id="l-maquina">${maqOpts}</select></div>
           <div class="field"><label>Turno</label>
             <select id="l-turno">
-              <option value="1">A Turno</option>
-              <option value="2">B Turno</option>
-              <option value="3">C Turno</option>
+              <option value="1">1º Turno</option>
+              <option value="2">2º Turno</option>
+              <option value="3">3º Turno</option>
             </select>
           </div>
         </div>
@@ -386,7 +387,10 @@ function renderForm(c){
       </div>
       <div class="grid2">
         <div class="field"><label>Ordem de processo</label><input type="text" id="f-ordem" placeholder="Ex: 1212112"></div>
-        <div class="field"><label>Produto</label><input type="text" id="f-produto" placeholder="Ex: 19.04.19 NBPT"></div>
+        <div class="field"><label>Produto</label>
+          <input type="text" id="f-produto" list="produtos-list" placeholder="Produto" autocomplete="off">
+          <datalist id="produtos-list">${PRODUTOS.map(p=>`<option value="${p.nome}">`).join('')}</datalist>
+        </div>
       </div>
       <div class="grid2">
         <div class="field"><label>Placa</label><input type="text" id="f-placa" placeholder="Ex: PPY5J06" style="text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()"></div>
