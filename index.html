@@ -55,7 +55,10 @@ code,.mono{font-family:'DM Mono',monospace;font-size:12px}
    ============================================================ */
 .shell{width:100%;padding:0 0 60px}
 .topbar{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(90deg, var(--brand3) 0%, var(--brand2) 40%, var(--brand) 100%);padding:0 36px;min-height:82px;box-shadow:0 2px 16px rgba(90,16,18,0.28);position:sticky;top:0;z-index:100}
-.logo-wrap{display:flex;align-items:center;gap:20px}
+.logo-wrap{display:flex;align-items:center;gap:20px;min-width:0}
+.logo-wrap img{flex-shrink:0}
+.logo-text{min-width:0}
+.logo-text .logo-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .logo-text .logo-name{font-size:17px;font-weight:700;color:#fff;letter-spacing:-0.2px}
 .logo-text .logo-sub{font-size:12px;color:rgba(255,255,255,0.60);margin-top:2px}
 .topbar-user{display:flex;align-items:center;gap:10px}
@@ -149,13 +152,42 @@ textarea{height:64px;resize:vertical}
    RESPONSIVO (celular / tablet)
    ============================================================ */
 @media(max-width:768px){
-  .grid2,.grid3,.grid4{grid-template-columns:1fr 1fr}
-  .topbar{padding:0 16px;min-height:56px}
-  .tab{padding:11px 12px;font-size:12px}
-  .nav-wrap{padding:0 16px}
-  .content-wrap{padding:20px 16px}
+  .grid3,.grid4{grid-template-columns:1fr 1fr}
+  .grid2{grid-template-columns:1fr}
+
+  .topbar{
+    flex-wrap:wrap;
+    padding:10px 16px;
+    min-height:auto;
+    gap:8px;
+  }
+  .logo-wrap img{height:60px}
+  .logo-text .logo-name{font-size:14px}
+  .logo-text .logo-sub{font-size:10.5px}
+  .topbar-user{gap:8px}
+  .uname{display:none} /* some com o nome no mobile pra economizar espaço */
+
+  .nav-wrap{padding:0 8px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .tab-bar{gap:2px}
+  .tab{padding:11px 10px;font-size:11.5px;white-space:nowrap;flex-shrink:0}
+
+  .content-wrap{padding:16px 12px}
+
+  .login-box{padding:32px 22px;max-width:100%}
+  .login-logo img{height:70px}
+
+  .row-actions{flex-direction:column}
+  .row-actions .btn-primary{width:100%}
+
+  .card{padding:16px 16px}
 }
-@media(max-width:480px){.grid2,.grid3,.grid4{grid-template-columns:1fr}}
+
+@media(max-width:480px){
+  .grid2,.grid3,.grid4{grid-template-columns:1fr}
+  .mcard .val{font-size:22px}
+  .topbar-user .avatar{width:30px;height:30px}
+  .btn-logout span{display:none} /* se quiser deixar só o ícone do botão sair */
+}
 
 /* Fundo animado (foto da fabrica com zoom lento + escurecido) */
 .login-page{position:relative;overflow:hidden}
