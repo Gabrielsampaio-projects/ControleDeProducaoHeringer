@@ -233,9 +233,18 @@ const LOGO_URL = 'https://ocbgdeknqnajwrucywpx.supabase.co/storage/v1/object/pub
    fecham/alteram um sequenciamento, mais abaixo.
    ---------------------------------------------------------------- */
 async function sbGet(table, params=''){
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}${params}`,{headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`,'Content-Type':'application/json'}});
-  if(!r.ok) throw new Error(await r.text());
-  return r.json();
+  let lastErr;
+  for(let i=0;i<3;i++){
+    try{
+      const r=await fetch(`${SUPABASE_URL}/rest/v1/${table}${params}`,{headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`,'Content-Type':'application/json'}});
+      if(!r.ok) throw new Error(await r.text());
+      return await r.json();
+    }catch(e){
+      lastErr=e;
+      if(i<2) await new Promise(r=>setTimeout(r,700*(i+1)));
+    }
+  }
+  throw lastErr;
 }
 async function sbPost(table, body){
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify(body)});
@@ -338,11 +347,12 @@ async function doLogin(){
   if(!maquinaSel.value){renderLogin('Selecione o maquinário.');return}
   if(!supSel.value){renderLogin('Selecione o supervisor responsável.');return}
   try{
-    const rows=await sbGet('producao_usuarios',`?usuario=eq.${encodeURIComponent(usuario)}&senha=eq.${encodeURIComponent(senha)}&ativo=eq.true&select=id,usuario,nome_completo`);
+  const rows=await sbGet('producao_usuarios',`?usuario=eq.${encodeURIComponent(usuario)}&senha=eq.${encodeURIComponent(senha)}&ativo=eq.true&select=id,usuario,nome_completo,master`);
     if(!rows.length){renderLogin('Usuário ou senha incorretos.');return}
     const user=rows[0];
     session={
       usuario_id:user.id, usuario:user.usuario, nome:user.nome_completo,
+      master: user.master === true,
       maquina_id:maquinaSel.value, maquina_nome:maquinaSel.selectedOptions[0].dataset.nome,
       turno:document.getElementById('l-turno').value,
       supervisor_id:supSel.value, supervisor_nome:supSel.selectedOptions[0].dataset.nome
@@ -359,7 +369,7 @@ function doLogout(){session=null;saveSession(null);renderLogin()}
    Monta o topbar, as abas de navegacao e chama a primeira aba.
    ================================================================ */
 function renderApp(){
-  const tabs=[{k:'form',l:'Registrar sequenciamento'},{k:'hoje',l:'Sequenciamentos de hoje'},{k:'dashboard',l:'Dashboard'},{k:'relatorio',l:'Relatório'}];
+  const tabs=[{k:'form',l:'Registrar sequenciamento'},{k:'sap',l:'Emissões SAP'},{k:'hoje',l:'Sequenciamentos de hoje'},{k:'dashboard',l:'Dashboard'},{k:'relatorio',l:'Relatório'}];
   document.getElementById('root').innerHTML=`
     <div class="shell">
       <div class="topbar">
@@ -393,9 +403,131 @@ function switchTab(k,el){
 function renderTab(k){
   const c=document.getElementById('tab-content');
   if(k==='form') renderForm(c);
+  else if(k==='sap') renderSAP(c);
   else if(k==='hoje') renderHoje(c);
   else if(k==='dashboard') renderDashboard(c);
   else if(k==='relatorio') renderRelatorio(c);
+}
+async function renderSAP(c){
+  setLoading(c,'Carregando emissões SAP...');
+  try{
+    // Busca com retry automático (resolve o "Failed to fetch" intermitente)
+    async function fetchComRetry(fn, tentativas=3){
+      for(let i=0;i<tentativas;i++){
+        try{ return await fn(); }
+        catch(e){ if(i===tentativas-1) throw e; await new Promise(r=>setTimeout(r,800*(i+1))); }
+      }
+    }
+
+    const [sapRows, prodRows] = await Promise.all([
+      fetchComRetry(()=>sbGet('sequenciamento_sap','?order=data_criacao.asc,hora_criacao.asc')),
+      fetchComRetry(()=>sbGet('producao_apontamentos',`?status=in.(em_producao,produzido)&select=ordem_processo,status`))
+    ]);
+
+    // Mapa: ordem_processo → status do apontamento
+    const statusProd = {};
+    prodRows.forEach(r=>{ if(r.ordem_processo) statusProd[r.ordem_processo] = r.status; });
+
+    // Enriquece cada linha SAP com status real
+    const rows = sapRows.map(r=>({
+      ...r,
+      _status_real: statusProd[r.ordem_processo] === 'produzido'   ? 'produzido'
+                  : statusProd[r.ordem_processo] === 'em_producao' ? 'em_producao'
+                  : r.pre_sequenciamento ? 'pre_seq'
+                  : 'aguardando'
+    })).filter(r => r._status_real !== 'produzido'); // remove produzidas
+
+    window._sapData = rows;
+    renderSAPLista(c, rows, 'todos');
+
+  }catch(e){
+    c.innerHTML=`
+      <div class="alert alert-err">${icons.err}<span>Erro ao carregar: ${e.message}</span></div>
+      <button class="btn-primary" style="width:auto;margin-top:12px;" onclick="renderSAP(document.getElementById('tab-content'))">Tentar novamente</button>`;
+  }
+}
+
+function renderSAPLista(c, rows, filtro){
+  const badges={
+    em_producao:`<span class="badge b-ok">Em produção</span>`,
+    pre_seq:`<span class="badge" style="background:var(--purple-bg);color:var(--purple-text);">Pré-sequenciamento</span>`,
+    aguardando:`<span class="badge b-normal">Aguardando sequenciamento</span>`
+  };
+  const filtrados = filtro==='todos' ? rows
+    : rows.filter(r=>r._status_real===filtro);
+
+  const countEm   = rows.filter(r=>r._status_real==='em_producao').length;
+  const countPre  = rows.filter(r=>r._status_real==='pre_seq').length;
+  const countAg   = rows.filter(r=>r._status_real==='aguardando').length;
+
+  c.innerHTML=`
+    <!-- Modal de filtro -->
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
+      <span style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;">Filtrar:</span>
+      <button onclick="renderSAPLista(document.getElementById('tab-content'),window._sapData,'todos')"
+        style="padding:6px 14px;border-radius:8px;border:1px solid var(--border2);background:${filtro==='todos'?'var(--brand)':'var(--surface)'};color:${filtro==='todos'?'#fff':'var(--text)'};font-size:12px;font-weight:600;cursor:pointer;">
+        Todos (${rows.length})
+      </button>
+      <button onclick="renderSAPLista(document.getElementById('tab-content'),window._sapData,'aguardando')"
+        style="padding:6px 14px;border-radius:8px;border:1px solid var(--border2);background:${filtro==='aguardando'?'var(--brand)':'var(--surface)'};color:${filtro==='aguardando'?'#fff':'var(--text)'};font-size:12px;font-weight:600;cursor:pointer;">
+        Aguardando (${countAg})
+      </button>
+      <button onclick="renderSAPLista(document.getElementById('tab-content'),window._sapData,'pre_seq')"
+        style="padding:6px 14px;border-radius:8px;border:1px solid var(--border2);background:${filtro==='pre_seq'?'var(--brand)':'var(--surface)'};color:${filtro==='pre_seq'?'#fff':'var(--text)'};font-size:12px;font-weight:600;cursor:pointer;">
+        Pré-seq. (${countPre})
+      </button>
+      <button onclick="renderSAPLista(document.getElementById('tab-content'),window._sapData,'em_producao')"
+        style="padding:6px 14px;border-radius:8px;border:1px solid var(--border2);background:${filtro==='em_producao'?'var(--brand)':'var(--surface)'};color:${filtro==='em_producao'?'#fff':'var(--text)'};font-size:12px;font-weight:600;cursor:pointer;">
+        Em produção (${countEm})
+      </button>
+      <button onclick="renderSAP(document.getElementById('tab-content'))"
+        style="margin-left:auto;padding:15px 14px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);font-size:12px;cursor:pointer;">
+         Atualizar
+      </button>
+    </div>
+
+    <div class="card" style="padding:4px 22px;">
+      <div class="card-title">Emissões SAP — ${filtrados.length} registro(s)</div>
+      ${!filtrados.length?'<div class="empty">Nenhuma emissão neste filtro.</div>':
+      filtrados.map(r=>`<div class="row">
+        <div class="row-head">
+          <strong>OP: ${r.ordem_processo||'-'}</strong>
+          ${badges[r._status_real]||''}
+          ${r._status_real==='aguardando'?`
+            <button onclick="togglePreSeq('${r.id}',${!r.pre_sequenciamento})"
+              style="margin-left:auto;padding:4px 12px;border-radius:7px;border:1px solid var(--purple-text);background:var(--purple-bg);color:var(--purple-text);font-size:11px;font-weight:600;cursor:pointer;">
+              + Pré-sequenciar
+            </button>`:''}
+          ${r._status_real==='pre_seq'?`
+            <button onclick="togglePreSeq('${r.id}',false)"
+              style="margin-left:auto;padding:4px 12px;border-radius:7px;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);font-size:11px;cursor:pointer;">
+              Remover fila
+            </button>`:''}
+          <span style="font-size:11px;color:var(--text3);">${fmtDate(r.data_criacao)} ${r.hora_criacao||''}</span>
+        </div>
+        <div class="row-sub">
+          <strong>${r.descricao_material||'-'}</strong> · Cód: ${r.codigo_material||'-'} · Qtd OP: <strong>${r.ord_proc_qtd??'-'} t</strong> · ${r.tipo_embalagem||'-'}
+        </div>
+        <div class="row-sub">
+          Cliente: ${r.cliente||'-'} · OV: ${r.ordem_venda||'-'} · Remessa: ${r.remessa||'-'}
+        </div>
+        <div class="row-sub">
+          Motorista: ${r.motorista||'-'} · Placa: ${r.placa_caminhao||'-'} · Frete: ${r.tipo_frete||'-'}
+        </div>
+      </div>`).join('')}
+    </div>`;
+}
+
+async function togglePreSeq(id, valor){
+  try{
+    const r=await fetch(`${SUPABASE_URL}/rest/v1/sequenciamento_sap?id=eq.${id}`,{
+      method:'PATCH',
+      headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`,'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify({pre_sequenciamento: valor})
+    });
+    if(!r.ok) throw new Error(await r.text());
+    renderSAP(document.getElementById('tab-content'));
+  }catch(e){ alert('Erro ao atualizar: '+e.message); }
 }
 
 /* ================================================================
@@ -433,6 +565,17 @@ function renderForm(c){
           </select>
         </div>
       </div>
+      <div class="grid2">
+        <div class="field"><label>Embalagem</label>
+          <select id="f-embalagem">
+            <option value="">Selecione...</option>
+            <option value="25 KG">25 KG</option>
+            <option value="50 KG">50 KG</option>
+            <option value="500 KG">500 KG</option>
+            <option value="1000 KG">1000 KG</option>
+          </select>
+        </div>
+      </div>
       <div class="field"><label>Observação complementar (opcional)</label><textarea id="f-obs"></textarea></div>
       <button class="btn-primary" id="btn-salvar" onclick="registrar()">Iniciar produção</button>
       <div id="save-msg"></div>
@@ -464,6 +607,7 @@ async function registrar(){
     produto:document.getElementById('f-produto').value.trim(),
     placa:document.getElementById('f-placa').value.trim(),
     ensaque:document.getElementById('f-ensaque').value,
+    embalagem:document.getElementById('f-embalagem').value,
     observacao:document.getElementById('f-obs').value.trim(),
     status:'em_producao',
     tipo_registro:'producao'
@@ -531,7 +675,7 @@ async function renderAbertas(c){
         emProducao.map(r=>`
           <div class="row" id="row-${r.id}">
             <div class="row-head"><strong>${r.ordem_processo}</strong><span class="badge b-ok">Em produção</span><span style="font-size:11px;color:var(--text3);">início ${(r.hora_inicio||'').slice(0,5)}</span></div>
-            <div class="row-sub">${r.produto||'-'} · Placa ${r.placa||'-'}${r.ensaque?' · '+r.ensaque:''}</div>
+            <div class="row-sub">${r.produto||'-'} · Placa ${r.placa||'-'}${r.ensaque?' · '+r.ensaque:''}${r.embalagem?' . '+r.embalagem:'' }</div>
             <div id="closebox-${r.id}"></div>
             <div class="row-actions" style="display:flex;gap:8px;margin-top:10px;">
               <button class="btn-primary" style="width:auto;background:var(--green-text);box-shadow:none;" onclick="abrirFechamento('${r.id}','produzido')">Produzido</button>
@@ -649,7 +793,15 @@ async function renderHoje(c){
   setLoading(c);
   try{
     const hoje=new Date().toISOString().split('T')[0];
-    const rows=await sbGet('producao_apontamentos',`?maquina_id=eq.${session.maquina_id}&data=eq.${hoje}&order=hora_inicio.desc`);
+    // Pega ordens do dia OU ordens de ontem ainda em aberto (sem hora_fim)
+    const [rowsHoje, rowsOntem] = await Promise.all([
+      sbGet('producao_apontamentos',`?maquina_id=eq.${session.maquina_id}&data=eq.${hoje}&order=hora_inicio.desc`),
+      sbGet('producao_apontamentos',`?maquina_id=eq.${session.maquina_id}&data=lt.${hoje}&status=eq.em_producao&order=hora_inicio.desc`)
+    ]);
+    // Junta, removendo duplicatas por id
+    const ids = new Set(rowsHoje.map(r=>r.id));
+    const rows = [...rowsHoje, ...rowsOntem.filter(r=>!ids.has(r.id))];
+
     c.innerHTML=`
       <p class="section-title">Sequenciamentos de hoje — ${session.maquina_nome} (${rows.length})</p>
       <div class="card" style="padding:4px 22px;">
@@ -658,6 +810,7 @@ async function renderHoje(c){
           <div class="row-head">
             <strong>${r.ordem_processo}</strong>
             ${statusBadge(r)}
+            ${r.data!==hoje?`<span class="badge b-parada" title="Iniciado em ${fmtDate(r.data)}">Dia anterior</span>`:''}
             <span style="font-size:11px;color:var(--text3);">${(r.hora_inicio||'').slice(0,5)} – ${(r.hora_fim||'').slice(0,5)||'em aberto'}</span>
           </div>
           <div class="row-sub">${r.produto||'-'} · Placa ${r.placa||'-'}${r.ensaque?' · '+r.ensaque:''} · Volume: ${r.volume_produzido??'-'} · Rejeito: ${r.rejeito||'-'}</div>
@@ -709,18 +862,30 @@ async function renderDashboard(c){
 async function renderRelatorio(c){
   setLoading(c);
   try{
-    const rows=await sbGet('producao_apontamentos','?order=data.desc,hora_inicio.desc');
+    const hoje=new Date().toISOString().split('T')[0];
+    // master vê tudo; operador vê só sua máquina
+    // Inclui registros de qualquer data, não filtra por data
+    const filtro = session.master
+      ? `?order=data.desc,hora_inicio.desc`
+      : `?maquina_id=eq.${session.maquina_id}&order=data.desc,hora_inicio.desc`;
+
+    const rows=await sbGet('producao_apontamentos', filtro);
     window._relatorioData=rows;
+
+    const titulo = session.master
+      ? `Relatório consolidado — todos os maquinários (${rows.length})`
+      : `Relatório — ${session.maquina_nome} (${rows.length})`;
+
     c.innerHTML=`
       <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
         <button class="btn-export" onclick="exportExcel()">${icons.dl} Exportar Excel</button>
       </div>
       <div class="card" style="padding:4px 22px;">
-        <p class="section-title" style="margin-top:10px;">Todos os sequenciamentos (${rows.length})</p>
+        <p class="section-title" style="margin-top:10px;">${titulo}</p>
         ${!rows.length?'<div class="empty">Nenhum sequenciamento registrado ainda.</div>':
         rows.map(r=>`<div class="row">
           <div class="row-head"><strong>${r.ordem_processo||'Parada geral'}</strong>${statusBadge(r)}<span style="font-size:11px;color:var(--text3);">${fmtDate(r.data)} · ${(r.hora_inicio||'').slice(0,5)}–${(r.hora_fim||'').slice(0,5)||'aberto'} (${fmtDuracao(calcularDuracaoMin(r.data,r.hora_inicio,r.hora_fim))||'-'})</span></div>
-          <div class="row-sub">${r.produto||'-'}${r.ensaque?' · '+r.ensaque:''} · Volume: ${r.volume_produzido??'-'} · Rejeito: ${r.rejeito||'-'}</div>
+          <div class="row-sub">${r.produto||'-'}${r.ensaque?' · '+r.ensaque:''}${r.embalagem?' · '+r.embalagem:''} · Volume: ${r.volume_produzido??'-'} · Rejeito: ${r.rejeito||'-'}</div>
           <div class="row-sub">Operador: ${r.operador_nome||'-'} · Supervisor: ${r.supervisor_nome||'-'} · ${r.maquina_nome||'-'}</div>
         </div>`).join('')}
       </div>`;
@@ -755,35 +920,57 @@ function fmtDuracao(min){
    incluindo operador, supervisor, maquina, ensaque e duracao.
    ---------------------------------------------------------------- */
 function exportExcel(){
-  const rows=window._relatorioData||[];
-  const wb=XLSX.utils.book_new();
-  const statusLabel={em_producao:'Em produção',produzido:'Produzido',parada:'Parada'};
-  const data=rows.map(r=>{
-    const duracaoMin=calcularDuracaoMin(r.data,r.hora_inicio,r.hora_fim);
-    return{
-      'Data':fmtDate(r.data),
-      'Hora início':r.hora_inicio,
-      'Hora fim':r.hora_fim||'',
-      'Duração':fmtDuracao(duracaoMin),
-      'Status':statusLabel[r.status]||r.status,
-      'Ordem de processo':r.ordem_processo||'',
-      'Produto':r.produto,
-      'Ensaque':r.ensaque||'',
-      'Placa':r.placa,
-      'Máquina':r.maquina_nome||'',
-      'Turno':r.turno||'',
-      'Operador':r.operador_nome||'',
-      'Supervisor':r.supervisor_nome||'',
-      'Volume produzido':r.volume_produzido,
-      'Rejeito':r.rejeito,
-      'Cód. parada':r.cod_parada||'',
-      'Observação':r.observacao||''
+  const rows = window._relatorioData || [];
+  const wb = XLSX.utils.book_new();
+  const statusLabel = {em_producao:'Em produção', produzido:'Produzido', parada:'Parada'};
+
+  function buildRow(r){
+    const duracaoMin = calcularDuracaoMin(r.data, r.hora_inicio, r.hora_fim);
+    return {
+      'Data': fmtDate(r.data),
+      'Hora início': r.hora_inicio,
+      'Hora fim': r.hora_fim || '',
+      'Duração': fmtDuracao(duracaoMin),
+      'Status': statusLabel[r.status] || r.status,
+      'Ordem de processo': r.ordem_processo || '',
+      'Produto': r.produto || '',
+      'Embalagem': r.embalagem || '',
+      'Ensaque': r.ensaque || '',
+      'Placa': r.placa || '',
+      'Máquina': r.maquina_nome || '',
+      'Turno': r.turno || '',
+      'Operador': r.operador_nome || '',
+      'Supervisor': r.supervisor_nome || '',
+      'Volume produzido': r.volume_produzido || '',
+      'Rejeito': r.rejeito || '',
+      'Cód. parada': r.cod_parada || '',
+      'Observação': r.observacao || ''
     };
+  }
+
+  const colWidths = [{wch:12},{wch:11},{wch:11},{wch:10},{wch:14},{wch:18},{wch:25},{wch:12},{wch:12},{wch:12},{wch:12},{wch:8},{wch:20},{wch:20},{wch:16},{wch:12},{wch:14},{wch:30}];
+
+  function addSheet(name, subset){
+    const data = subset.map(buildRow);
+    const ws = XLSX.utils.json_to_sheet(data.length ? data : [{'Sem registros':''}]);
+    ws['!cols'] = colWidths;
+    XLSX.utils.book_append_sheet(wb, ws, name.slice(0,31)); // Excel limita 31 chars
+  }
+
+  // Filtra apenas do dia atual ou com hora_fim no dia atual
+  const hoje = new Date().toISOString().split('T')[0];
+  const doDia = rows.filter(r => r.data === hoje || (r.hora_fim && r.data === hoje));
+
+  // Aba Geral
+  addSheet('Geral', doDia);
+
+  // Abas por ensacadeira
+  const ensaques = [...new Set(doDia.map(r => r.ensaque).filter(Boolean))].sort();
+  ensaques.forEach(ens => {
+    addSheet(ens, doDia.filter(r => r.ensaque === ens));
   });
-  const ws=XLSX.utils.json_to_sheet(data.length?data:[{'Sem registros':''}]);
-  ws['!cols']=[{wch:12},{wch:11},{wch:11},{wch:10},{wch:14},{wch:18},{wch:25},{wch:12},{wch:12},{wch:12},{wch:8},{wch:20},{wch:20},{wch:16},{wch:12},{wch:14},{wch:30}];
-  XLSX.utils.book_append_sheet(wb,ws,'Sequenciamentos');
-  XLSX.writeFile(wb,`controle_producao_${new Date().toISOString().slice(0,10)}.xlsx`);
+
+  XLSX.writeFile(wb, `producao_${hoje}.xlsx`);
 }
 
 /* Dispara tudo: verifica sessao salva e mostra login ou plataforma */
