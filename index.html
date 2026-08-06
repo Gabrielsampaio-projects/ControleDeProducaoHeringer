@@ -216,28 +216,38 @@ textarea{height:64px;resize:vertical}
 
 <script>
 /* ================================================================
-   CONFIGURACAO DO BANCO DE DADOS (Supabase)
-   URL e chave publica do projeto. A chave 'anon/publishable' e
-   segura de deixar exposta no navegador: o controle de acesso real
-   fica nas politicas (RLS) configuradas dentro do Supabase.
+   CONFIGURACAO DO BACKEND
+   O HTML agora fala com a nossa API (FastAPI) em vez de ir
+   direto ao Supabase. A chave secreta do Supabase fica apenas
+   no servidor — nunca chega ao navegador.
    ================================================================ */
-const SUPABASE_URL = 'https://ovwcukyrunkhtcunyhsi.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_9A9pHfRkaAWvc2kToA6RVA_yE-TnCa9';
+const API_URL = 'https://controledeproducaoheringer-production.up.railway.app';
 const LOGO_URL = 'https://ocbgdeknqnajwrucywpx.supabase.co/storage/v1/object/public/Logo%20Heringer/Logotipo%20A%20Horizontal.png';
 
+let _jwtToken = null;
+
 /* ----------------------------------------------------------------
-   FUNCOES DE ACESSO AO BANCO (Supabase REST API)
-   sbGet  -> busca dados (SELECT)
-   sbPost -> insere um novo registro (INSERT)
-   As chamadas de PATCH (UPDATE) ficam direto nas funcoes que
-   fecham/alteram um sequenciamento, mais abaixo.
+   FUNCOES DE ACESSO À API (substituem sbGet / sbPost direto ao Supabase)
+   api()   -> qualquer método (GET, POST, PATCH, DELETE)
+   apiGet  -> atalho GET
+   apiPost -> atalho POST
    ---------------------------------------------------------------- */
-async function sbGet(table, params=''){
+async function api(method, path, body=null, isForm=false){
   let lastErr;
+  const headers = {'Authorization': `Bearer ${_jwtToken}`};
+  if(!isForm) headers['Content-Type'] = 'application/json';
+
   for(let i=0;i<3;i++){
     try{
-      const r=await fetch(`${SUPABASE_URL}/rest/v1/${table}${params}`,{headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`,'Content-Type':'application/json'}});
-      if(!r.ok) throw new Error(await r.text());
+      const opts = {method, headers};
+      if(body){
+        opts.body = isForm ? body : JSON.stringify(body);
+      }
+      const r = await fetch(`${API_URL}${path}`, opts);
+      if(!r.ok){
+        const txt = await r.text();
+        throw new Error(txt);
+      }
       return await r.json();
     }catch(e){
       lastErr=e;
@@ -246,11 +256,9 @@ async function sbGet(table, params=''){
   }
   throw lastErr;
 }
-async function sbPost(table, body){
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`,{method:'POST',headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify(body)});
-  if(!r.ok) throw new Error(await r.text());
-  return r.json();
-}
+const apiGet  = (path)        => api('GET',   path);
+const apiPost = (path, body)  => api('POST',  path, body);
+const apiPatch= (path, body)  => api('PATCH', path, body);
 
 /* ----------------------------------------------------------------
    SESSAO DO USUARIO (fica salva no navegador, localStorage)
@@ -289,15 +297,16 @@ const icons={
    ---------------------------------------------------------------- */
 async function init(){
   try{
-    MAQUINAS = await sbGet('producao_maquinas','?ativo=eq.true&order=nome.asc');
-    SUPERVISORES = await sbGet('producao_supervisores','?ativo=eq.true&order=nome.asc');
-    PRODUTOS = await sbGet('producao_produtos','?ativo=eq.true&order=nome.asc');
+    const data = await fetch(`${API_URL}/api/init`).then(r=>r.json());
+    MAQUINAS    = data.maquinas;
+    SUPERVISORES= data.supervisores;
+    PRODUTOS    = data.produtos;
   }catch(e){
-    document.getElementById('root').innerHTML = `<div class="login-page"><div class="login-box"><div class="alert alert-err">${icons.err}<span>Não foi possível conectar ao banco de dados. Verifique se o script SQL já foi executado no Supabase.<br><br>Detalhe: ${e.message}</span></div></div></div>`;
+    document.getElementById('root').innerHTML = `<div class="login-page"><div class="login-box"><div class="alert alert-err">${icons.err}<span>Não foi possível conectar ao servidor. Verifique se o backend está rodando.<br><br>Detalhe: ${e.message}</span></div></div></div>`;
     return;
   }
-  session = loadSession();
-  if(session) renderApp();
+  const saved = loadSession();
+  if(saved){ _jwtToken = saved.token; session = saved.session; renderApp(); }
   else renderLogin();
 }
 
@@ -347,22 +356,29 @@ async function doLogin(){
   if(!maquinaSel.value){renderLogin('Selecione o maquinário.');return}
   if(!supSel.value){renderLogin('Selecione o supervisor responsável.');return}
   try{
-  const rows=await sbGet('producao_usuarios',`?usuario=eq.${encodeURIComponent(usuario)}&senha=eq.${encodeURIComponent(senha)}&ativo=eq.true&select=id,usuario,nome_completo,master`);
-    if(!rows.length){renderLogin('Usuário ou senha incorretos.');return}
-    const user=rows[0];
-    session={
-      usuario_id:user.id, usuario:user.usuario, nome:user.nome_completo,
-      master: user.master === true,
-      maquina_id:maquinaSel.value, maquina_nome:maquinaSel.selectedOptions[0].dataset.nome,
-      turno:document.getElementById('l-turno').value,
-      supervisor_id:supSel.value, supervisor_nome:supSel.selectedOptions[0].dataset.nome
-    };
-    saveSession(session);
+    const resp = await fetch(`${API_URL}/api/login`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        usuario, senha,
+        maquina_id:   maquinaSel.value,
+        maquina_nome: maquinaSel.selectedOptions[0].dataset.nome,
+        turno:        document.getElementById('l-turno').value,
+        supervisor_id:   supSel.value,
+        supervisor_nome: supSel.selectedOptions[0].dataset.nome,
+      })
+    });
+    if(resp.status===401){renderLogin('Usuário ou senha incorretos.');return}
+    if(!resp.ok) throw new Error(await resp.text());
+    const data = await resp.json();
+    _jwtToken = data.token;
+    session   = data.session;
+    saveSession({token: _jwtToken, session});
     renderApp();
   }catch(e){renderLogin('Erro ao conectar: '+e.message)}
 }
 /* Limpa a sessao e volta pra tela de login */
-function doLogout(){session=null;saveSession(null);renderLogin()}
+function doLogout(){session=null;_jwtToken=null;saveSession(null);renderLogin()}
 
 /* ================================================================
    ESTRUTURA PRINCIPAL DA PLATAFORMA (depois do login)
@@ -419,24 +435,7 @@ async function renderSAP(c){
       }
     }
 
-    const [sapRows, prodRows] = await Promise.all([
-      fetchComRetry(()=>sbGet('sequenciamento_sap','?order=data_criacao.asc,hora_criacao.asc')),
-      fetchComRetry(()=>sbGet('producao_apontamentos',`?status=in.(em_producao,produzido)&select=ordem_processo,status`))
-    ]);
-
-    // Mapa: ordem_processo → status do apontamento
-    const statusProd = {};
-    prodRows.forEach(r=>{ if(r.ordem_processo) statusProd[r.ordem_processo] = r.status; });
-
-    // Enriquece cada linha SAP com status real
-    const rows = sapRows.map(r=>({
-      ...r,
-      _status_real: statusProd[r.ordem_processo] === 'produzido'   ? 'produzido'
-                  : statusProd[r.ordem_processo] === 'em_producao' ? 'em_producao'
-                  : r.pre_sequenciamento ? 'pre_seq'
-                  : 'aguardando'
-    })).filter(r => r._status_real !== 'produzido'); // remove produzidas
-
+    const rows = await apiGet('/api/sap');
     window._sapData = rows;
     renderSAPLista(c, rows, 'todos');
 
@@ -520,12 +519,7 @@ function renderSAPLista(c, rows, filtro){
 
 async function togglePreSeq(id, valor){
   try{
-    const r=await fetch(`${SUPABASE_URL}/rest/v1/sequenciamento_sap?id=eq.${id}`,{
-      method:'PATCH',
-      headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`,'Content-Type':'application/json','Prefer':'return=minimal'},
-      body:JSON.stringify({pre_sequenciamento: valor})
-    });
-    if(!r.ok) throw new Error(await r.text());
+    await apiPatch(`/api/sap/${id}/pre-seq?valor=${valor}`, {});
     renderSAP(document.getElementById('tab-content'));
   }catch(e){ alert('Erro ao atualizar: '+e.message); }
 }
@@ -620,7 +614,7 @@ async function registrar(){
   const btn=document.getElementById('btn-salvar');
   btn.disabled=true;btn.innerHTML=`<span class="spinner"></span>Salvando...`;
   try{
-    await sbPost('producao_apontamentos',payload);
+    await apiPost('/api/apontamentos', payload);
     renderForm(document.getElementById('tab-content'));
     document.getElementById('save-msg').innerHTML=`<div class="alert alert-info">${icons.info}<span>Ordem iniciada em produção.</span></div>`;
   }catch(e){
@@ -649,7 +643,7 @@ async function registrarParadaGeral(){
     tipo_registro:'parada_geral'
   };
   try{
-    await sbPost('producao_apontamentos',payload);
+    await apiPost('/api/apontamentos', payload);
     renderForm(document.getElementById('tab-content'));
     document.getElementById('pg-msg').innerHTML=`<div class="alert alert-info">${icons.info}<span>Parada geral registrada.</span></div>`;
   }catch(e){
@@ -662,11 +656,13 @@ async function registrarParadaGeral(){
 async function renderAbertas(c){
   setLoading(c,'Carregando sequenciamentos em aberto...');
   try{
-    const abertas=await sbGet('producao_apontamentos',`?maquina_id=eq.${session.maquina_id}&status=eq.em_producao&order=hora_inicio.desc`);
+    const hoje=new Date().toISOString().split('T')[0];
+    const [abertas, paradasRecentes] = await Promise.all([
+      apiGet(`/api/apontamentos?maquina_id=${session.maquina_id}&status=em_producao&order=hora_inicio.desc`),
+      apiGet(`/api/apontamentos?maquina_id=${session.maquina_id}&status=parada&tipo_registro=producao&data=${hoje}&order=hora_fim.desc`),
+    ]);
     const emProducao=abertas.filter(r=>r.tipo_registro==='producao');
     const paradasGerais=abertas.filter(r=>r.tipo_registro==='parada_geral');
-    const hoje=new Date().toISOString().split('T')[0];
-    const paradasRecentes=await sbGet('producao_apontamentos',`?maquina_id=eq.${session.maquina_id}&status=eq.parada&tipo_registro=eq.producao&data=eq.${hoje}&order=hora_fim.desc`);
 
     c.innerHTML=`
       <div class="card">
@@ -712,8 +708,7 @@ async function renderAbertas(c){
 /* Encerra uma parada geral (fecha o horario, machine volta a rodar) */
 async function encerrarParadaGeral(id){
   try{
-    const r=await fetch(`${SUPABASE_URL}/rest/v1/producao_apontamentos?id=eq.${id}`,{method:'PATCH',headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({hora_fim:nowHM(),status:'produzido'})});
-    if(!r.ok) throw new Error(await r.text());
+    await apiPatch(`/api/apontamentos/${id}`, {hora_fim:nowHM(), status:'produzido'});
     renderAbertas(document.getElementById('abertas-wrap'));
   }catch(e){alert('Erro ao encerrar: '+e.message)}
 }
@@ -722,19 +717,18 @@ async function encerrarParadaGeral(id){
    de uma ordem que estava parada — assim a ordem 'continua' depois do reparo */
 async function retomarProducao(idOrigem){
   try{
-    const rows=await sbGet('producao_apontamentos',`?id=eq.${idOrigem}&select=ordem_processo,produto,placa,ensaque`);
-    if(!rows.length) return;
-    const origem=rows[0];
-    const payload={
-      usuario_id:session.usuario_id, maquina_id:session.maquina_id, turno:session.turno, supervisor_id:session.supervisor_id,
-      operador_nome:session.nome, supervisor_nome:session.supervisor_nome, maquina_nome:session.maquina_nome,
-      data:new Date().toISOString().split('T')[0],
-      hora_inicio:nowHM(),
-      ordem_processo:origem.ordem_processo, produto:origem.produto, placa:origem.placa, ensaque:origem.ensaque,
-      status:'em_producao', tipo_registro:'producao',
-      retomada_de:idOrigem
-    };
-    await sbPost('producao_apontamentos',payload);
+    const origem = await apiGet(`/api/apontamentos/${idOrigem}`);
+    await apiPost('/api/apontamentos', {
+      data: new Date().toISOString().split('T')[0],
+      hora_inicio: nowHM(),
+      ordem_processo: origem.ordem_processo,
+      produto: origem.produto,
+      placa: origem.placa,
+      ensaque: origem.ensaque,
+      status: 'em_producao',
+      tipo_registro: 'producao',
+      retomada_de: idOrigem,
+    });
     renderAbertas(document.getElementById('abertas-wrap'));
   }catch(e){alert('Erro ao retomar: '+e.message)}
 }
@@ -779,8 +773,7 @@ async function fecharOrdem(id,tipo){
     if(obs) patch.observacao=obs;
   }
   try{
-    const r=await fetch(`${SUPABASE_URL}/rest/v1/producao_apontamentos?id=eq.${id}`,{method:'PATCH',headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify(patch)});
-    if(!r.ok) throw new Error(await r.text());
+    await apiPatch(`/api/apontamentos/${id}`, patch);
     renderAbertas(document.getElementById('abertas-wrap'));
   }catch(e){alert('Erro ao atualizar: '+e.message)}
 }
@@ -795,8 +788,8 @@ async function renderHoje(c){
     const hoje=new Date().toISOString().split('T')[0];
     // Pega ordens do dia OU ordens de ontem ainda em aberto (sem hora_fim)
     const [rowsHoje, rowsOntem] = await Promise.all([
-      sbGet('producao_apontamentos',`?maquina_id=eq.${session.maquina_id}&data=eq.${hoje}&order=hora_inicio.desc`),
-      sbGet('producao_apontamentos',`?maquina_id=eq.${session.maquina_id}&data=lt.${hoje}&status=eq.em_producao&order=hora_inicio.desc`)
+      apiGet(`/api/apontamentos?maquina_id=${session.maquina_id}&data=${hoje}&order=hora_inicio.desc`),
+      apiGet(`/api/apontamentos?maquina_id=${session.maquina_id}&data_lt=${hoje}&status=em_producao&order=hora_inicio.desc`),
     ]);
     // Junta, removendo duplicatas por id
     const ids = new Set(rowsHoje.map(r=>r.id));
@@ -829,7 +822,7 @@ async function renderDashboard(c){
   setLoading(c,'Carregando dashboard...');
   try{
     const hoje=new Date().toISOString().split('T')[0];
-    const rows=await sbGet('producao_apontamentos',`?data=eq.${hoje}&order=hora_inicio.desc`);
+    const rows=await apiGet(`/api/apontamentos?data=${hoje}&order=hora_inicio.desc`);
     const totalVolume=rows.reduce((s,r)=>s+(parseFloat(r.volume_produzido)||0),0);
     const emProducao=rows.filter(r=>r.status==='em_producao').length;
     const paradas=rows.filter(r=>r.status==='parada').length;
@@ -865,11 +858,11 @@ async function renderRelatorio(c){
     const hoje=new Date().toISOString().split('T')[0];
     // master vê tudo; operador vê só sua máquina
     // Inclui registros de qualquer data, não filtra por data
-    const filtro = session.master
-      ? `?order=data.desc,hora_inicio.desc`
-      : `?maquina_id=eq.${session.maquina_id}&order=data.desc,hora_inicio.desc`;
+    const params = session.master
+      ? `/api/apontamentos?order=data.desc,hora_inicio.desc`
+      : `/api/apontamentos?maquina_id=${session.maquina_id}&order=data.desc,hora_inicio.desc`;
 
-    const rows=await sbGet('producao_apontamentos', filtro);
+    const rows=await apiGet(params);
     window._relatorioData=rows;
 
     const titulo = session.master
