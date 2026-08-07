@@ -176,7 +176,7 @@ async def get_apontamentos(
     params = f"?order={order}"
     if retomada is not None:
         val = "true" if retomada.lower() == "true" else "false"
-        params += f"&retomada=eq.{val}"
+        params += f"&retomada=eq.{val}" # fix indentacao
 
     # Operador só vê sua máquina (a não ser que seja master e não passe maquina_id)
     if not sess["master"] and not maquina_id:
