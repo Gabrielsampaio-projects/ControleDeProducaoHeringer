@@ -691,7 +691,7 @@ async function renderAbertas(c){
     const hoje=new Date().toISOString().split('T')[0];
     const [abertas, paradasRecentes] = await Promise.all([
       apiGet(`/api/apontamentos?maquina_id=${session.maquina_id}&status=em_producao&order=hora_inicio.desc`),
-      apiGet(`/api/apontamentos?maquina_id=${session.maquina_id}&status=parada&tipo_registro=producao&data=${hoje}&retomada=false&order=hora_fim.desc`),
+      apiGet(`/api/apontamentos?maquina_id=${session.maquina_id}&status=parada&tipo_registro=producao&data=${hoje}&order=hora_fim.desc`),
     ]);
     const emProducao=abertas.filter(r=>r.tipo_registro==='producao');
     const paradasGerais=abertas.filter(r=>r.tipo_registro==='parada_geral');
@@ -722,11 +722,10 @@ async function renderAbertas(c){
             <button class="btn-primary" style="width:auto;margin-top:10px;background:var(--green-text);" onclick="encerrarParadaGeral('${r.id}')">Encerrar parada</button>
           </div>`).join('')}
       </div>`:''}
-
-      ${paradasRecentes.length?`
+${paradasRecentes.filter(r=>!abertas.some(a=>a.retomada_de===r.id)).length?`
       <div class="card">
-        <div class="card-title">Paradas recentes — retomar produção (${paradasRecentes.length})</div>
-        ${paradasRecentes.map(r=>`
+        <div class="card-title">Paradas recentes — retomar produção (${paradasRecentes.filter(r=>!abertas.some(a=>a.retomada_de===r.id)).length})</div>
+        ${paradasRecentes.filter(r=>!abertas.some(a=>a.retomada_de===r.id)).map(r=>`
           <div class="row">
             <div class="row-head"><strong>${r.ordem_processo}</strong><span class="badge b-parada">Parada: ${r.cod_parada||'-'}</span><span style="font-size:11px;color:var(--text3);">parou às ${(r.hora_fim||'').slice(0,5)}</span></div>
             <div class="row-sub">${r.produto||'-'} · Placa ${r.placa||'-'}${r.ensaque?' · '+r.ensaque:''}</div>
