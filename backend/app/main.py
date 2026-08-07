@@ -159,6 +159,7 @@ class ApontamentoPatch(BaseModel):
     rejeito: Optional[str] = None
     cod_parada: Optional[str] = None
     observacao: Optional[str] = None
+    retomada: Optional[bool] = None  
 
 @app.get("/api/apontamentos")
 async def get_apontamentos(
@@ -167,11 +168,13 @@ async def get_apontamentos(
     status: Optional[str] = None,
     data_lt: Optional[str] = None,
     tipo_registro: Optional[str] = None,
+    retomada: Optional[str] = None,  
     order: str = "data.desc,hora_inicio.desc",
     sess: dict = Depends(verificar_token),
 ):
     http = app.state.http
     params = f"?order={order}"
+    if retomada is not None: params += f"&retomada=eq.{retomada}"
 
     # Operador só vê sua máquina (a não ser que seja master e não passe maquina_id)
     if not sess["master"] and not maquina_id:

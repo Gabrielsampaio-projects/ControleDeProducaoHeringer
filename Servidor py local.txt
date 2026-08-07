@@ -1,0 +1,10 @@
+Servidor py local
+
+python -m http.server 3000
+
+backend local
+cd "C:\Users\Usuário Local\Desktop\Controle de produção\backend"
+python -m uvicorn app.main:app --reload
+
+host html
+const API_URL = 'http://localhost:8000';

@@ -691,7 +691,7 @@ async function renderAbertas(c){
     const hoje=new Date().toISOString().split('T')[0];
     const [abertas, paradasRecentes] = await Promise.all([
       apiGet(`/api/apontamentos?maquina_id=${session.maquina_id}&status=em_producao&order=hora_inicio.desc`),
-      apiGet(`/api/apontamentos?maquina_id=${session.maquina_id}&status=parada&tipo_registro=producao&data=${hoje}&order=hora_fim.desc`),
+      apiGet(`/api/apontamentos?maquina_id=${session.maquina_id}&status=parada&tipo_registro=producao&data=${hoje}&retomada=false&order=hora_fim.desc`),
     ]);
     const emProducao=abertas.filter(r=>r.tipo_registro==='producao');
     const paradasGerais=abertas.filter(r=>r.tipo_registro==='parada_geral');
@@ -750,6 +750,9 @@ async function encerrarParadaGeral(id){
 async function retomarProducao(idOrigem){
   try{
     const origem = await apiGet(`/api/apontamentos/${idOrigem}`);
+    // Marca a parada original como "retomada" para sair da lista
+    await apiPatch(`/api/apontamentos/${idOrigem}`, { retomada: true });
+    // Cria novo registro em produção
     await apiPost('/api/apontamentos', {
       data: new Date().toISOString().split('T')[0],
       hora_inicio: nowHM(),
