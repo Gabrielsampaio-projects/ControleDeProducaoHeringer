@@ -244,6 +244,17 @@ async function api(method, path, body=null, isForm=false){
         opts.body = isForm ? body : JSON.stringify(body);
       }
       const r = await fetch(`${API_URL}${path}`, opts);
+
+      // Token expirado ou inválido — redireciona para login automaticamente
+      if(r.status === 401){
+        saveSession(null);
+        session = null;
+        _jwtToken = null;
+        alert('Sua sessão expirou. Faça login novamente.');
+        renderLogin();
+        throw new Error('Token expirado');
+      }
+
       if(!r.ok){
         const txt = await r.text();
         throw new Error(txt);
@@ -251,6 +262,8 @@ async function api(method, path, body=null, isForm=false){
       return await r.json();
     }catch(e){
       lastErr=e;
+      // Não tenta retry em caso de token expirado
+      if(e.message === 'Token expirado') throw e;
       if(i<2) await new Promise(r=>setTimeout(r,700*(i+1)));
     }
   }
