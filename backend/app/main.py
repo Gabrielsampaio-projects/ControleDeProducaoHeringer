@@ -240,7 +240,7 @@ async def get_apontamento(id: str, sess: dict = Depends(verificar_token)):
 @app.get("/api/sap")
 async def get_sap(sess: dict = Depends(verificar_token)):
     http = app.state.http
-    sap_rows, prod_rows = await __import__("asyncio").gather(
+    sap_rows, prod_rows = await asyncio.gather(
         sb_get(http, "sequenciamento_sap", "?order=data_criacao.asc,hora_criacao.asc"),
         sb_get(http, "producao_apontamentos",
                "?status=in.(em_producao,produzido)&select=ordem_processo,status"),
@@ -332,7 +332,26 @@ async def importar_sap(
     await sb_post(http, "sequenciamento_sap", registros)
     return {"importados": len(registros), "data": data_hoje}
 
-# ── health check ──────────────────────────────────────────────────────────────
+# ── health check + keepalive ──────────────────────────────────────────────────
 @app.get("/")
 def health():
     return {"status": "ok", "app": "Heringer Produção API"}
+
+@app.get("/ping")
+def ping():
+    return {"pong": True}
+
+# Keepalive: faz ping em si mesmo a cada 10 min para não adormecer no Railway
+async def keepalive():
+    await asyncio.sleep(30)  # aguarda o servidor subir
+    while True:
+        try:
+            async with httpx.AsyncClient() as c:
+                await c.get("https://controledeproducaoheringer-production.up.railway.app/ping", timeout=10)
+        except Exception:
+            pass
+        await asyncio.sleep(600)  # 10 minutos
+
+@app.on_event("startup")
+async def startup_keepalive():
+    asyncio.create_task(keepalive())
