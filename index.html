@@ -581,7 +581,142 @@ function nowHM(){const d=new Date();return d.toTimeString().slice(0,5)}
 /* Desenha o formulario de abrir ordem + card de parada geral + lista do que esta aberto */
 function renderForm(c){
   const today=new Date().toISOString().split('T')[0];
-  c.innerHTML=` 
+  c.innerHTML=`
+    <div style="width:100%;border-radius:var(--radius-lg);overflow:hidden;margin-bottom:16px;position:relative;height:220px;background:#2a1f1f;border:1px solid var(--border)">
+      <style>
+        .hz-col{position:absolute;bottom:60px;width:8px;background:#5a4a3a;border:1px solid #3a2a1a}
+        .hz-plat{position:absolute;height:6px;background:#6b5a3a;border-top:2px solid #CA2535}
+        .hz-rail{position:absolute;height:2px;background:#CA2535}
+        .hz-railv{position:absolute;width:2px;background:#CA2535}
+        .hz-silo{position:absolute;bottom:60px;background:#4a3a2a;border:2px solid #3a2a1a}
+        .hz-silo-top{position:absolute;background:#3a2a1a;border-radius:3px 3px 0 0}
+        .hz-truck{position:absolute;bottom:20px;animation:hzTruck 7s linear infinite}
+        @keyframes hzTruck{0%{left:110%}100%{left:-220px}}
+        .hz-tbody{width:110px;height:38px;background:#e8e8e8;border:2px solid #aaa;border-radius:2px 2px 0 0;position:relative}
+        .hz-tcab{width:38px;height:38px;background:#ddd;border:2px solid #aaa;border-radius:3px 3px 0 0;position:absolute;right:-40px;top:0}
+        .hz-twin{width:18px;height:13px;background:#87ceeb;position:absolute;top:7px;right:5px;border-radius:2px}
+        .hz-wheel{width:18px;height:18px;background:#222;border-radius:50%;position:absolute;bottom:-11px;border:2px solid #555;animation:hzW 0.5s linear infinite}
+        @keyframes hzW{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+        .hz-cargo{position:absolute;top:6px;left:6px;right:6px;bottom:4px;background:#8B1A1E;border-radius:2px;transform-origin:top;animation:hzLoad 7s linear infinite}
+        @keyframes hzLoad{0%,35%{transform:scaleY(0)}50%,100%{transform:scaleY(1)}}
+        .hz-belt-wrap{position:absolute;background:#3a3a3a;overflow:hidden}
+        .hz-belt{position:absolute;top:0;left:0;right:0;bottom:0;animation:hzBelt 0.4s linear infinite;background:repeating-linear-gradient(90deg,#333 0px,#333 18px,#555 18px,#555 20px)}
+        @keyframes hzBelt{from{background-position:0 0}to{background-position:-20px 0}}
+        .hz-sack{position:absolute;width:14px;height:11px;background:#c8a96e;border:1px solid #8a6d3a;border-radius:2px;animation:hzSack 7s linear infinite}
+        @keyframes hzSack{0%,33%{opacity:0;top:90px;left:142px}34%{opacity:1;top:90px;left:142px}47%{opacity:0;top:130px;left:142px}48%,100%{opacity:0}}
+        .hz-s2{animation-delay:0.4s}.hz-s3{animation-delay:0.8s}
+        .hz-smoke{position:absolute;width:10px;height:10px;background:rgba(180,170,160,0.5);border-radius:50%;animation:hzSmk 2s ease-out infinite}
+        @keyframes hzSmk{0%{opacity:0.6;transform:scale(0.4) translateY(0)}100%{opacity:0;transform:scale(2.5) translateY(-30px)}}
+        .hz-gear{animation:hzGear 2.5s linear infinite}
+        .hz-gear2{animation:hzGear 1.5s linear infinite reverse}
+        @keyframes hzGear{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+        .hz-road{position:absolute;bottom:0;left:0;right:0;height:20px;background:#555;border-top:2px solid #777}
+        .hz-roadline{position:absolute;bottom:6px;height:3px;width:40px;background:#CA2535;animation:hzRoad 1.2s linear infinite}
+        @keyframes hzRoad{from{left:110%}to{left:-50px}}
+        .hz-ground{position:absolute;bottom:20px;left:0;right:0;height:40px;background:#3a2a1a}
+        .hz-badge{position:absolute;top:8px;right:10px;background:rgba(202,37,53,0.9);color:#fff;font-size:10px;font-weight:600;padding:3px 10px;border-radius:5px;border:1px solid #8B1A1E;letter-spacing:.04em;font-family:'DM Sans',sans-serif}
+      </style>
+
+      <div class="hz-ground"></div>
+
+      <div class="hz-col" style="left:55px;height:160px"></div>
+      <div class="hz-col" style="left:100px;height:155px"></div>
+      <div class="hz-col" style="left:145px;height:130px"></div>
+      <div class="hz-col" style="left:190px;height:110px"></div>
+      <div class="hz-col" style="left:75px;height:120px"></div>
+      <div class="hz-col" style="left:120px;height:100px"></div>
+
+      <div class="hz-plat" style="bottom:160px;left:45px;width:130px"></div>
+      <div class="hz-rail" style="bottom:166px;left:45px;width:130px"></div>
+      <div class="hz-railv" style="bottom:160px;left:45px;height:22px"></div>
+      <div class="hz-railv" style="bottom:160px;left:85px;height:22px"></div>
+      <div class="hz-railv" style="bottom:160px;left:125px;height:22px"></div>
+      <div class="hz-railv" style="bottom:160px;left:170px;height:22px"></div>
+
+      <div class="hz-plat" style="bottom:110px;left:45px;width:175px"></div>
+      <div class="hz-rail" style="bottom:116px;left:45px;width:175px"></div>
+      <div class="hz-railv" style="bottom:110px;left:45px;height:20px"></div>
+      <div class="hz-railv" style="bottom:110px;left:90px;height:20px"></div>
+      <div class="hz-railv" style="bottom:110px;left:135px;height:20px"></div>
+      <div class="hz-railv" style="bottom:110px;left:215px;height:20px"></div>
+
+      <div class="hz-plat" style="bottom:60px;left:45px;width:215px"></div>
+      <div class="hz-rail" style="bottom:66px;left:45px;width:215px"></div>
+      <div class="hz-railv" style="bottom:60px;left:45px;height:18px"></div>
+      <div class="hz-railv" style="bottom:60px;left:100px;height:18px"></div>
+      <div class="hz-railv" style="bottom:60px;left:155px;height:18px"></div>
+      <div class="hz-railv" style="bottom:60px;left:255px;height:18px"></div>
+
+      <div style="position:absolute;bottom:60px;left:45px;width:3px;height:105px;background:#CA2535;transform:rotate(-22deg);transform-origin:bottom left"></div>
+      <div style="position:absolute;bottom:60px;left:50px;width:3px;height:105px;background:#8B1A1E;transform:rotate(-22deg);transform-origin:bottom left"></div>
+
+      <div style="position:absolute;bottom:60px;left:80px;width:25px;height:50px;background:#4a3a2a;border:1px solid #3a2a1a"></div>
+      <div style="position:absolute;bottom:110px;left:55px;width:22px;height:50px;background:#5a4a3a;border:1px solid #3a2a1a"></div>
+
+      <div class="hz-silo" style="left:260px;width:35px;height:140px"><div class="hz-silo-top" style="width:43px;height:18px;left:-4px;top:-16px"></div></div>
+      <div class="hz-silo" style="left:302px;width:35px;height:155px"><div class="hz-silo-top" style="width:43px;height:18px;left:-4px;top:-16px"></div></div>
+      <div class="hz-silo" style="left:344px;width:35px;height:125px"><div class="hz-silo-top" style="width:43px;height:18px;left:-4px;top:-16px"></div></div>
+      <div class="hz-smoke" style="left:275px;bottom:200px"></div>
+      <div class="hz-smoke" style="left:275px;bottom:200px;animation-delay:0.8s"></div>
+      <div class="hz-smoke" style="left:315px;bottom:215px;animation-delay:0.4s"></div>
+
+      <div class="hz-belt-wrap" style="bottom:100px;left:140px;width:120px;height:14px;border-radius:7px">
+        <div class="hz-belt"></div>
+      </div>
+      <div class="hz-sack hz-s2"></div>
+      <div class="hz-sack hz-s3"></div>
+      <div class="hz-sack" style="animation-delay:1.2s"></div>
+
+      <svg style="position:absolute;bottom:130px;left:52px" width="55" height="55" viewBox="0 0 55 55">
+        <g class="hz-gear" style="transform-origin:35px 35px">
+          <circle cx="35" cy="35" r="16" fill="#5a4a3a" stroke="#CA2535" stroke-width="1.5"/>
+          <circle cx="35" cy="35" r="8" fill="#3a2a1a"/>
+          <rect x="32" y="16" width="6" height="10" rx="2" fill="#CA2535"/>
+          <rect x="32" y="44" width="6" height="10" rx="2" fill="#CA2535" transform="rotate(180 35 49)"/>
+          <rect x="16" y="32" width="10" height="6" rx="2" fill="#CA2535"/>
+          <rect x="44" y="32" width="10" height="6" rx="2" fill="#CA2535"/>
+          <circle cx="35" cy="35" r="3" fill="#CA2535"/>
+        </g>
+        <g class="hz-gear2" style="transform-origin:16px 16px">
+          <circle cx="16" cy="16" r="10" fill="#6a5a3a" stroke="#8B1A1E" stroke-width="1.5"/>
+          <circle cx="16" cy="16" r="5" fill="#3a2a1a"/>
+          <rect x="13" y="3" width="6" height="7" rx="2" fill="#8B1A1E"/>
+          <rect x="13" y="26" width="6" height="7" rx="2" fill="#8B1A1E" transform="rotate(180 16 29.5)"/>
+          <rect x="3" y="13" width="7" height="6" rx="2" fill="#8B1A1E"/>
+          <rect x="26" y="13" width="7" height="6" rx="2" fill="#8B1A1E"/>
+          <circle cx="16" cy="16" r="3" fill="#8B1A1E"/>
+        </g>
+      </svg>
+
+      <div class="hz-truck">
+        <div class="hz-tbody">
+          <div class="hz-cargo"></div>
+        </div>
+        <div class="hz-tcab"><div class="hz-twin"></div></div>
+        <div class="hz-wheel" style="left:10px"></div>
+        <div class="hz-wheel" style="left:68px"></div>
+        <div class="hz-wheel" style="right:-28px"></div>
+      </div>
+
+      <div class="hz-truck" style="animation-delay:1.5s">
+        <div class="hz-tbody" style="background:#e0e8e0">
+          <div class="hz-cargo" style="background:#5C1114"></div>
+        </div>
+        <div class="hz-tcab" style="background:#d0d8d0"><div class="hz-twin"></div></div>
+        <div class="hz-wheel" style="left:10px"></div>
+        <div class="hz-wheel" style="left:68px"></div>
+        <div class="hz-wheel" style="right:-28px"></div>
+      </div>
+
+      <div class="hz-road">
+        <div class="hz-roadline" style="animation-delay:0s"></div>
+        <div class="hz-roadline" style="animation-delay:0.4s"></div>
+        <div class="hz-roadline" style="animation-delay:0.8s"></div>
+      </div>
+
+      <div class="hz-badge">Unidade de ensaque — ${session.maquina_nome}</div>
+    </div>
+
     <div class="card">
       <div class="card-title">Abrir ordem em produção <span class="badge b-normal" style="margin-left:6px;">${session.maquina_nome}</span></div>
       <div class="grid2">
