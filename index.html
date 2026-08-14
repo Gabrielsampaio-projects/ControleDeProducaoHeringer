@@ -635,8 +635,96 @@ function renderForm(c){
       <div id="pg-msg"></div>
     </div>
 
+    <div id="preseq-wrap"></div>
     <div id="abertas-wrap"></div>`;
   renderAbertas(document.getElementById('abertas-wrap'));
+  renderPreSeqFila(document.getElementById('preseq-wrap'));
+}
+
+/* Busca ordens pre-sequenciadas no SAP e exibe fila de inicio */
+async function renderPreSeqFila(wrap){
+  if(!wrap) return;
+  try{
+    const rows = await apiGet('/api/sap');
+    const preSeq = rows.filter(r=>r._status_real==='pre_seq');
+    if(!preSeq.length){ wrap.innerHTML=''; return; }
+    wrap.innerHTML=`
+      <div class="card" style="border-left:4px solid var(--brand);">
+        <div class="card-title">
+          Ordens pré-sequenciadas aguardando início
+          <span class="badge b-parada" style="margin-left:8px;">${preSeq.length}</span>
+        </div>
+        <div class="row-sub" style="margin-bottom:14px;">
+          Ordens emitidas no SAP e marcadas para produção nesta máquina. Clique em <strong>Iniciar</strong> para registrar com a hora atual.
+        </div>
+        ${preSeq.map(r=>`
+          <div class="row" style="border-left:3px solid var(--brand);padding-left:12px;">
+            <div class="row-head">
+              <strong>OP: ${r.ordem_processo||'-'}</strong>
+              <span class="badge" style="background:var(--purple-bg);color:var(--purple-text);">Pré-sequenciado</span>
+              <span style="font-size:11px;color:var(--text3);">${r.tipo_embalagem||''}</span>
+            </div>
+            <div class="row-sub">
+              <strong>${r.descricao_material||'-'}</strong> · Qtd OP: ${r.ord_proc_qtd??'-'} t
+            </div>
+            <div class="row-sub">
+              Cliente: ${r.cliente||'-'} · OV: ${r.ordem_venda||'-'} · Placa: ${r.placa_caminhao||'-'}
+            </div>
+            <div style="margin-top:8px;display:flex;gap:8px;align-items:center;">
+              <input type="text" id="placa-preseq-${r.id}" placeholder="Placa do caminhão" 
+                value="${r.placa_caminhao||''}"
+                style="width:160px;padding:6px 10px;border:1px solid var(--border2);border-radius:6px;font-size:13px;"
+                oninput="this.value=this.value.toUpperCase()">
+              <select id="ensaque-preseq-${r.id}" style="padding:6px 10px;border:1px solid var(--border2);border-radius:6px;font-size:13px;">
+                <option value="Ensaque 1">Ensaque 1</option>
+                <option value="Ensaque 2">Ensaque 2</option>
+              </select>
+              <button onclick="iniciarPreSeq('${r.id}','${r.ordem_processo}','${r.descricao_material}','${r.tipo_embalagem}')"
+                style="padding:7px 18px;background:var(--brand);color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;">
+                ▶ Iniciar produção
+              </button>
+              <button onclick="togglePreSeq('${r.id}',false,null)"
+                style="padding:7px 12px;background:var(--surface2);color:var(--text2);border:1px solid var(--border2);border-radius:7px;font-size:12px;cursor:pointer;">
+                Remover da fila
+              </button>
+            </div>
+          </div>`).join('')}
+      </div>`;
+  }catch(e){ wrap.innerHTML=''; }
+}
+
+async function iniciarPreSeq(sapId, ordemProcesso, produto, tipoEmbalagem){
+  const placa   = document.getElementById(`placa-preseq-${sapId}`)?.value.trim() || '';
+  const ensaque = document.getElementById(`ensaque-preseq-${sapId}`)?.value || 'Ensaque 1';
+
+  // Mapeia embalagem do SAP para o formato do sistema
+  const embUpper = (tipoEmbalagem||'').toUpperCase();
+  const embalagem = embUpper.includes('25') ? '25 KG'
+                  : embUpper.includes('50') ? '50 KG'
+                  : embUpper.includes('500') ? '500 KG'
+                  : (embUpper.includes('1000')||embUpper.includes('BIG')) ? '1000 KG' : '';
+
+  const payload = {
+    data:           new Date().toISOString().split('T')[0],
+    hora_inicio:    nowHM(),
+    ordem_processo: ordemProcesso,
+    produto:        produto,
+    placa:          placa,
+    ensaque:        ensaque,
+    embalagem:      embalagem,
+    status:         'em_producao',
+    tipo_registro:  'producao',
+  };
+
+  try{
+    await apiPost('/api/apontamentos', payload);
+    // Remove da fila de pre-seq no SAP
+    await apiPatch(`/api/sap/${sapId}/pre-seq?valor=false`, {});
+    // Recarrega a aba
+    renderForm(document.getElementById('tab-content'));
+    document.getElementById('save-msg') && (document.getElementById('save-msg').innerHTML=
+      `<div class="alert alert-info">${icons.info}<span>Ordem <strong>${ordemProcesso}</strong> iniciada em produção!</span></div>`);
+  }catch(e){ alert('Erro ao iniciar: '+e.message); }
 }
 
 /* Salva uma nova ordem em producao (status = em_producao) */
