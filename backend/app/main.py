@@ -13,6 +13,7 @@ import httpx, os, jwt, datetime, io, pandas as pd, json
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from typing import Optional
+import asyncio
 
 load_dotenv()
 
@@ -128,7 +129,7 @@ async def login(body: LoginPayload):
 @app.get("/api/init")
 async def init_data():
     http = app.state.http
-    maquinas, supervisores, produtos = await __import__("asyncio").gather(
+    maquinas, supervisores, produtos = await asyncio.gather(
         sb_get(http, "producao_maquinas",  "?ativo=eq.true&order=nome.asc"),
         sb_get(http, "producao_supervisores", "?ativo=eq.true&order=nome.asc"),
         sb_get(http, "producao_produtos",  "?ativo=eq.true&order=nome.asc"),
@@ -324,34 +325,37 @@ async def importar_sap(
         raise HTTPException(400, "Nenhum registro válido encontrado no arquivo")
 
     http = app.state.http
-    # Apaga os registros da data antes de reinserir
+
+    # Busca ordens já produzidas no banco para não reimportar
+    prod_rows = await sb_get(http, "producao_apontamentos",
+                             "?status=eq.produzido&select=ordem_processo")
+    produzidas = {r["ordem_processo"] for r in prod_rows if r.get("ordem_processo")}
+
+    # Filtra: não importa ordens que já foram produzidas
+    total_original = len(registros)
+    registros = [r for r in registros if r.get("ordem_processo") not in produzidas]
+    ignorados = total_original - len(registros)
+
+    if not registros:
+        return {"importados": 0, "ignorados": ignorados, "data": None,
+                "msg": "Todas as ordens já foram produzidas — nada importado."}
+
+    http = app.state.http
+    # Apaga os registros da data antes de reinserir (evita duplicatas)
     data_hoje = registros[0]["data_criacao"]
     if data_hoje:
-        await sb_delete(http, "sequenciamento_sap", f"?data_criacao=eq.{data_hoje}")
+        await sb_delete(http, "sequenciamento_sap", f"?data_criacao=eq.{data_hoje}&ordem_processo=not.in.({','.join(produzidas) if produzidas else 'null'})")
+    
+    # Também remove qualquer registro com as mesmas ordens de outras datas
+    for r in registros:
+        op = r.get("ordem_processo")
+        if op:
+            await sb_delete(http, "sequenciamento_sap", f"?ordem_processo=eq.{op}")
 
     await sb_post(http, "sequenciamento_sap", registros)
-    return {"importados": len(registros), "data": data_hoje}
+    return {"importados": len(registros), "ignorados": ignorados, "data": data_hoje}
 
-# ── health check + keepalive ──────────────────────────────────────────────────
+# ── health check ──────────────────────────────────────────────────────────────
 @app.get("/")
 def health():
     return {"status": "ok", "app": "Heringer Produção API"}
-
-@app.get("/ping")
-def ping():
-    return {"pong": True}
-
-# Keepalive: faz ping em si mesmo a cada 10 min para não adormecer no Railway
-async def keepalive():
-    await asyncio.sleep(30)  # aguarda o servidor subir
-    while True:
-        try:
-            async with httpx.AsyncClient() as c:
-                await c.get("https://controledeproducaoheringer-production.up.railway.app/ping", timeout=10)
-        except Exception:
-            pass
-        await asyncio.sleep(600)  # 10 minutos
-
-@app.on_event("startup")
-async def startup_keepalive():
-    asyncio.create_task(keepalive())
