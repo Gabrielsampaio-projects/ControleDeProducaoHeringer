@@ -1127,7 +1127,7 @@ function abrirJustificativaLacuna(de, ate){
     <div class="field"><label>Motivo</label>${motivosSelect('lac-mot')}</div>
     <div class="field"><label>Observação</label><input type="text" id="lac-obs" placeholder="O que aconteceu nesse período?"></div>
     <div style="display:flex;gap:8px;margin-top:10px;">
-      <button class="btn-primary" style="width:auto;background:#f59e0b;padding:7px 16px;" onclick="confirmarLacuna('${de}','${ate}')">
+      <button class="btn-primary" id="lac-btn-confirmar" style="width:auto;background:#f59e0b;padding:7px 16px;" onclick="confirmarLacuna('${de}','${ate}', this)">
         Confirmar
       </button>
       <button onclick="document.getElementById('lacuna-box').remove()"
@@ -1138,24 +1138,45 @@ function abrirJustificativaLacuna(de, ate){
   wrap.prepend(extra);
 }
 
-async function confirmarLacuna(hi, hf){
+async function confirmarLacuna(hi, hf, btnEl){
   const mot = document.getElementById('lac-mot')?.value;
   const obs = document.getElementById('lac-obs')?.value.trim();
   if(!mot){alert('Selecione o motivo.');return}
+
+  // Trava o botão imediatamente para não deixar clicar duas vezes
+  if(btnEl){ btnEl.disabled = true; btnEl.textContent = 'Salvando...'; }
+
   try{
-    await apiPost('/api/apontamentos',{
-      data:          new Date().toISOString().split('T')[0],
-      hora_inicio:   hi,
-      hora_fim:      hf,
-      cod_parada:    mot,
-      motivo_parada: mot,
-      classe_parada: PLANEJADAS.includes(mot)?'Planejada':'Não planejada',
-      observacao:    obs||'',
-      status:        'parada',
-      tipo_registro: 'parada_maquina',
-    });
+    const hoje = new Date().toISOString().split('T')[0];
+
+    // Confere se essa lacuna já foi justificada antes (evita duplicar)
+    const existentes = await apiGet(
+      `/api/apontamentos?maquina_id=${session.maquina_id}&data=${hoje}&tipo_registro=parada_maquina`
+    );
+    const jaJustificada = existentes.some(r =>
+      (r.hora_inicio||'').slice(0,5) === hi && (r.hora_fim||'').slice(0,5) === hf
+    );
+
+    if(!jaJustificada){
+      await apiPost('/api/apontamentos',{
+        data:          hoje,
+        hora_inicio:   hi,
+        hora_fim:      hf,
+        cod_parada:    mot,
+        motivo_parada: mot,
+        classe_parada: PLANEJADAS.includes(mot)?'Planejada':'Não planejada',
+        observacao:    obs||'',
+        status:        'parada',
+        tipo_registro: 'parada_maquina',
+      });
+    }
+
+    document.getElementById('lacuna-box')?.remove();
     renderAbertas(document.getElementById('abertas-wrap'));
-  }catch(e){alert('Erro: '+e.message)}
+  }catch(e){
+    alert('Erro: '+e.message);
+    if(btnEl){ btnEl.disabled = false; btnEl.textContent = 'Confirmar'; }
+  }
 }
 
 /* Encerra uma parada geral (fecha o horario, machine volta a rodar) */
