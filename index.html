@@ -789,57 +789,373 @@ async function registrarParadaGeral(){
   }
 }
 
-/* Busca e mostra: ordens em producao agora, paradas gerais em andamento,
-   e paradas recentes de ordens (pra oferecer o botao 'Retomar producao') */
+/* ================================================================
+   PAINEL DE CONTROLE DO TURNO
+   Mostra tudo em aberto: produções, paradas ativas, paradas da máquina
+   O operador nunca fica sem um apontamento aberto — cada minuto registrado
+   ================================================================ */
+const PLANEJADAS = ['Sobreposição Turno','Limpeza Semanal','Linha Não Programada para Operar',
+  'Manutenção Preventiva','Parada de Manutenção Anual','Refeição','DDS','Reuniões e Treinamentos'];
+
+function motivosSelect(idSelect){
+  return `<select id="${idSelect}" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:8px;font-size:13px;background:var(--surface);">
+    <option value="">Selecione o motivo...</option>
+            <optgroup label="— Planejadas —">
+              <option value="Sobreposição Turno">Sobreposição Turno</option>
+              <option value="Limpeza Semanal">Limpeza Semanal</option>
+              <option value="Linha Não Programada para Operar">Linha Não Programada para Operar</option>
+              <option value="Manutenção Preventiva">Manutenção Preventiva</option>
+              <option value="Parada de Manutenção Anual">Parada de Manutenção Anual</option>
+              <option value="Refeição">Refeição</option>
+              <option value="DDS">DDS</option>
+              <option value="Reuniões e Treinamentos">Reuniões e Treinamentos</option>
+            </optgroup>
+            <optgroup label="— Falha de Equipamento —">
+              <option value="Designador">Designador</option>
+              <option value="Insuflador">Insuflador</option>
+              <option value="Compressor">Compressor</option>
+              <option value="Peneira">Peneira</option>
+              <option value="Elevador">Elevador</option>
+              <option value="Misturador">Misturador</option>
+              <option value="Balança de Dosagem">Balança de Dosagem</option>
+              <option value="Balança de Carregamento">Balança de Carregamento</option>
+              <option value="Silos de Carregamento">Silos de Carregamento</option>
+              <option value="Flap">Flap</option>
+              <option value="Correia Transportadora">Correia Transportadora</option>
+              <option value="Dosagem de Óleo/Recobrimento">Dosagem de Óleo/Recobrimento</option>
+              <option value="Mangote">Mangote</option>
+              <option value="Ensacadeira">Ensacadeira</option>
+              <option value="Costureira">Costureira</option>
+              <option value="Sistema de Controle/Automação">Sistema de Controle/Automação</option>
+              <option value="Outro Equipamento">Outro Equipamento</option>
+            </optgroup>
+            <optgroup label="— Fluxo Operacional —">
+              <option value="Manobra de Caminhão">Manobra de Caminhão</option>
+              <option value="Setup de Fórmulas">Setup de Fórmulas</option>
+              <option value="Abastecimento de MP (Micro/Macro)">Abastecimento de MP (Micro/Macro)</option>
+              <option value="Falta de MP no Silo">Falta de MP no Silo</option>
+              <option value="Falta de Embalagem">Falta de Embalagem</option>
+              <option value="Falta de Caminhão">Falta de Caminhão</option>
+              <option value="Troca de Produto">Troca de Produto</option>
+              <option value="Fim de Turno">Fim de Turno</option>
+            </optgroup>
+            <optgroup label="— Qualidade —">
+              <option value="Retrabalho">Retrabalho</option>
+              <option value="Ajuste de Fórmula">Ajuste de Fórmula</option>
+            </optgroup>
+            <optgroup label="— Utilidades —">
+              <option value="Falta de Energia">Falta de Energia</option>
+              <option value="Falta de Água">Falta de Água</option>
+            </optgroup>
+            <optgroup label="— Externo —">
+              <option value="Aguardando Liberação Qualidade">Aguardando Liberação Qualidade</option>
+              <option value="Problema com Documento/NF">Problema com Documento/NF</option>
+            </optgroup>
+  </select>`;
+}
+
 async function renderAbertas(c){
-  setLoading(c,'Carregando sequenciamentos em aberto...');
+  setLoading(c,'Carregando painel do turno...');
   try{
     const hoje=new Date().toISOString().split('T')[0];
-    const [abertas, paradasRecentes] = await Promise.all([
-      apiGet(`/api/apontamentos?maquina_id=${session.maquina_id}&status=em_producao&order=hora_inicio.desc`),
-      apiGet(`/api/apontamentos?maquina_id=${session.maquina_id}&status=parada&tipo_registro=producao&data=${hoje}&order=hora_fim.desc`),
+    const [abertas, paradasHoje] = await Promise.all([
+      apiGet(`/api/apontamentos?maquina_id=${session.maquina_id}&status=em_producao&order=hora_inicio.asc`),
+      apiGet(`/api/apontamentos?maquina_id=${session.maquina_id}&data=${hoje}&order=hora_inicio.asc`),
     ]);
-    const emProducao=abertas.filter(r=>r.tipo_registro==='producao');
-    const paradasGerais=abertas.filter(r=>r.tipo_registro==='parada_geral');
+
+    const emProducao   = abertas.filter(r=>r.tipo_registro==='producao');
+    const paradasAtivas= abertas.filter(r=>r.tipo_registro==='parada_geral'||r.tipo_registro==='parada_maquina');
+    const historico    = paradasHoje.filter(r=>r.status==='parada'||r.status==='produzido');
+
+    // Detecta lacunas de tempo não registradas
+    function detectaLacunas(recs){
+      const lacunas=[];
+      const sorted=[...recs].filter(r=>r.hora_inicio&&r.hora_fim).sort((a,b)=>a.hora_inicio.localeCompare(b.hora_inicio));
+      for(let i=0;i<sorted.length-1;i++){
+        const fimAtual=sorted[i].hora_fim?.slice(0,5);
+        const inicioProx=sorted[i+1].hora_inicio?.slice(0,5);
+        if(fimAtual&&inicioProx&&inicioProx>fimAtual){
+          lacunas.push({de:fimAtual,ate:inicioProx});
+        }
+      }
+      return lacunas;
+    }
+    const lacunas=detectaLacunas(paradasHoje.filter(r=>r.hora_fim));
 
     c.innerHTML=`
-      <div class="card">
-        <div class="card-title">Ordens em produção nesta máquina (${emProducao.length})</div>
-        ${!emProducao.length?'<div class="empty">Nenhuma ordem em produção no momento.</div>':
+      <!-- PRODUÇÕES EM ANDAMENTO -->
+      <div class="card" style="border-left:4px solid var(--green-text);">
+        <div class="card-title">
+          🟢 Ordens em produção
+          <span class="badge b-ok" style="margin-left:8px;">${emProducao.length}</span>
+        </div>
+        ${!emProducao.length?`<div class="empty">Nenhuma ordem em produção. Registre uma ordem ou abra uma parada de máquina.</div>`:
         emProducao.map(r=>`
-          <div class="row" id="row-${r.id}">
-            <div class="row-head"><strong>${r.ordem_processo}</strong><span class="badge b-ok">Em produção</span><span style="font-size:11px;color:var(--text3);">início ${(r.hora_inicio||'').slice(0,5)}</span></div>
-            <div class="row-sub">${r.produto||'-'} · Placa ${r.placa||'-'}${r.ensaque?' · '+r.ensaque:''}${r.embalagem?' . '+r.embalagem:'' }</div>
+          <div class="row" id="row-${r.id}" style="border-left:3px solid var(--green-text);padding-left:10px;">
+            <div class="row-head">
+              <strong>${r.ordem_processo||'-'}</strong>
+              <span class="badge b-ok">Em produção</span>
+              <span style="font-size:11px;color:var(--text3);">desde ${(r.hora_inicio||'').slice(0,5)}</span>
+            </div>
+            <div class="row-sub">${r.produto||'-'} · ${r.embalagem||'-'} · Placa ${r.placa||'-'} · ${r.ensaque||'-'}</div>
             <div id="closebox-${r.id}"></div>
-            <div class="row-actions" style="display:flex;gap:8px;margin-top:10px;">
-              <button class="btn-primary" style="width:auto;background:var(--green-text);box-shadow:none;" onclick="abrirFechamento('${r.id}','produzido')">Produzido</button>
-              <button class="btn-primary" style="width:auto;background:var(--amber-text);box-shadow:none;" onclick="abrirFechamento('${r.id}','parada')">Parada</button>
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+              <button class="btn-primary" style="width:auto;background:var(--green-text);box-shadow:none;padding:7px 16px;" onclick="abrirFechamento('${r.id}','produzido')">
+                ✅ Finalizar produção
+              </button>
+              <button class="btn-primary" style="width:auto;background:var(--amber-text);box-shadow:none;padding:7px 16px;" onclick="abrirRegistroParada('${r.id}','producao')">
+                🔴 Registrar parada
+              </button>
             </div>
           </div>`).join('')}
       </div>
 
-      ${paradasGerais.length?`
-      <div class="card">
-        <div class="card-title">Paradas gerais em andamento (${paradasGerais.length})</div>
-        ${paradasGerais.map(r=>`
-          <div class="row">
-            <div class="row-head"><span class="badge b-parada">Parada: ${r.cod_parada}</span><span style="font-size:11px;color:var(--text3);">início ${(r.hora_inicio||'').slice(0,5)}</span></div>
-            ${r.observacao?`<div class="row-sub">${r.observacao}</div>`:''}
-            <button class="btn-primary" style="width:auto;margin-top:10px;background:var(--green-text);" onclick="encerrarParadaGeral('${r.id}')">Encerrar parada</button>
+      <!-- PARADAS ATIVAS DA MÁQUINA -->
+      ${paradasAtivas.length?`
+      <div class="card" style="border-left:4px solid var(--brand);">
+        <div class="card-title">
+          🔴 Máquina parada
+          <span class="badge b-parada" style="margin-left:8px;">${paradasAtivas.length} parada(s) ativa(s)</span>
+        </div>
+        ${paradasAtivas.map(r=>`
+          <div class="row" id="row-${r.id}" style="border-left:3px solid var(--brand);padding-left:10px;">
+            <div class="row-head">
+              <span class="badge b-parada">${r.cod_parada||r.motivo_parada||'Sem motivo'}</span>
+              <span class="badge" style="background:${PLANEJADAS.includes(r.cod_parada)?'var(--surface2)':'#fef3c7'};color:${PLANEJADAS.includes(r.cod_parada)?'var(--text3)':'#92400e'};font-size:10px;">
+                ${PLANEJADAS.includes(r.cod_parada)?'Planejada':'Não planejada'}
+              </span>
+              <span style="font-size:11px;color:var(--text3);">desde ${(r.hora_inicio||'').slice(0,5)}</span>
+            </div>
+            ${r.observacao?`<div class="row-sub">Obs: ${r.observacao}</div>`:''}
+            <div id="retorno-box-${r.id}"></div>
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+              <button class="btn-primary" style="width:auto;background:var(--green-text);box-shadow:none;padding:7px 16px;" onclick="abrirRetornoParada('${r.id}')">
+                ▶ Retornar à produção
+              </button>
+            </div>
           </div>`).join('')}
       </div>`:''}
-${paradasRecentes.filter(r=>!abertas.some(a=>a.retomada_de===r.id)).length?`
+
+      <!-- BOTÃO PARADA DE MÁQUINA SEM ORDEM -->
+      ${!paradasAtivas.length&&!emProducao.length?`
+      <div class="card" style="text-align:center;padding:20px;">
+        <div style="font-size:13px;color:var(--text2);margin-bottom:12px;">Máquina sem apontamento ativo. Registre uma parada para não deixar lacuna no turno.</div>
+        <button class="btn-primary" style="width:auto;background:var(--brand);padding:10px 24px;" onclick="abrirParadaMaquina()">
+          🔴 Registrar parada de máquina
+        </button>
+      </div>`:''}
+
+      <!-- LACUNAS DE TEMPO -->
+      ${lacunas.length?`
+      <div class="card" style="border-left:4px solid #f59e0b;background:#fffbeb;">
+        <div class="card-title" style="color:#92400e;">⚠️ Lacunas de tempo não registradas (${lacunas.length})</div>
+        ${lacunas.map(l=>`
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #fde68a;">
+            <span style="font-size:13px;color:#92400e;">⏱ ${l.de} → ${l.ate} sem apontamento</span>
+            <button onclick="abrirJustificativaLacuna('${l.de}','${l.ate}')"
+              style="padding:4px 12px;background:#f59e0b;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;">
+              Justificar
+            </button>
+          </div>`).join('')}
+      </div>`:''}
+
+      <!-- HISTÓRICO DO DIA -->
+      ${historico.length?`
       <div class="card">
-        <div class="card-title">Paradas recentes — retomar produção (${paradasRecentes.filter(r=>!abertas.some(a=>a.retomada_de===r.id)).length})</div>
-        ${paradasRecentes.filter(r=>!abertas.some(a=>a.retomada_de===r.id)).map(r=>`
-          <div class="row">
-            <div class="row-head"><strong>${r.ordem_processo}</strong><span class="badge b-parada">Parada: ${r.cod_parada||'-'}</span><span style="font-size:11px;color:var(--text3);">parou às ${(r.hora_fim||'').slice(0,5)}</span></div>
-            <div class="row-sub">${r.produto||'-'} · Placa ${r.placa||'-'}${r.ensaque?' · '+r.ensaque:''}</div>
-            <button class="btn-primary" style="width:auto;margin-top:10px;" onclick="retomarProducao('${r.id}')">Retomar produção</button>
+        <div class="card-title">📋 Histórico de hoje — ${historico.length} registro(s)</div>
+        ${historico.map(r=>`
+          <div class="row" style="border-left:3px solid ${r.status==='produzido'?'var(--green-text)':'var(--brand)'};padding-left:10px;">
+            <div class="row-head">
+              <strong>${r.ordem_processo||r.cod_parada||'-'}</strong>
+              ${r.status==='produzido'?'<span class="badge b-ok">Produzido</span>':'<span class="badge b-parada">Parada</span>'}
+              <span style="font-size:11px;color:var(--text3);">${(r.hora_inicio||'').slice(0,5)} → ${(r.hora_fim||'').slice(0,5)}</span>
+            </div>
+            <div class="row-sub">
+              ${r.produto?r.produto+' · ':''}
+              ${r.volume_produzido?'Vol: '+r.volume_produzido+'t · ':''}
+              ${r.cod_parada?'Motivo: '+r.cod_parada:''}
+              ${r.classe_parada?'· '+r.classe_parada:''}
+            </div>
           </div>`).join('')}
       </div>`:''}
     `;
   }catch(e){c.innerHTML=`<div class="alert alert-err">${icons.err}<span>Erro: ${e.message}</span></div>`}
+}
+
+/* Abre modal inline para registrar parada vinculada a uma ordem em produção */
+function abrirRegistroParada(idOrdem, tipo){
+  const box = document.getElementById('closebox-'+idOrdem);
+  box.innerHTML=`
+    <div style="background:var(--surface2);border-radius:8px;padding:14px;margin-top:10px;border:1px solid var(--border2);">
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;">🔴 Registrar parada</div>
+      <div class="grid2">
+        <div class="field"><label>Hora início da parada</label><input type="time" id="rp-hi-${idOrdem}" value="${nowHM()}"></div>
+        <div class="field"><label>Motivo</label>${motivosSelect('rp-mot-'+idOrdem)}</div>
+      </div>
+      <div class="field"><label>Observação (opcional)</label><input type="text" id="rp-obs-${idOrdem}" placeholder="Detalhes adicionais"></div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="btn-primary" style="width:auto;background:var(--amber-text);padding:7px 16px;" onclick="confirmarParadaOrdem('${idOrdem}')">
+          Confirmar parada
+        </button>
+        <button onclick="document.getElementById('closebox-${idOrdem}').innerHTML=''"
+          style="padding:7px 14px;background:var(--surface);border:1px solid var(--border2);border-radius:7px;cursor:pointer;font-size:13px;">
+          Cancelar
+        </button>
+      </div>
+    </div>`;
+}
+
+/* Confirma a parada: fecha a ordem atual e cria parada de máquina */
+async function confirmarParadaOrdem(idOrdem){
+  const hi   = document.getElementById('rp-hi-'+idOrdem)?.value;
+  const mot  = document.getElementById('rp-mot-'+idOrdem)?.value;
+  const obs  = document.getElementById('rp-obs-'+idOrdem)?.value.trim();
+  if(!mot){alert('Selecione o motivo de parada.');return}
+
+  try{
+    // 1. Fecha a ordem em produção com hora_fim = hora início da parada
+    await apiPatch(`/api/apontamentos/${idOrdem}`, {
+      hora_fim: hi,
+      status: 'parada',
+      cod_parada: mot,
+      motivo_parada: mot,
+      classe_parada: PLANEJADAS.includes(mot)?'Planejada':'Não planejada',
+      observacao: obs||undefined
+    });
+
+    // 2. Cria registro de parada da máquina
+    await apiPost('/api/apontamentos', {
+      data:          new Date().toISOString().split('T')[0],
+      hora_inicio:   hi,
+      cod_parada:    mot,
+      motivo_parada: mot,
+      classe_parada: PLANEJADAS.includes(mot)?'Planejada':'Não planejada',
+      observacao:    obs||'',
+      status:        'em_producao',
+      tipo_registro: 'parada_maquina',
+      retomada_de:   idOrdem,
+    });
+
+    renderAbertas(document.getElementById('abertas-wrap'));
+  }catch(e){alert('Erro ao registrar parada: '+e.message)}
+}
+
+/* Abre parada de máquina sem ordem vinculada */
+function abrirParadaMaquina(){
+  const wrap = document.getElementById('abertas-wrap');
+  const extra = document.createElement('div');
+  extra.id = 'parada-maq-box';
+  extra.className = 'card';
+  extra.style.borderLeft = '4px solid var(--brand)';
+  extra.innerHTML=`
+    <div class="card-title">🔴 Registrar parada de máquina</div>
+    <div class="grid2">
+      <div class="field"><label>Hora início</label><input type="time" id="pm-hi" value="${nowHM()}"></div>
+      <div class="field"><label>Motivo</label>${motivosSelect('pm-mot')}</div>
+    </div>
+    <div class="field"><label>Observação (opcional)</label><input type="text" id="pm-obs" placeholder="Detalhes adicionais"></div>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button class="btn-primary" style="width:auto;background:var(--brand);padding:7px 16px;" onclick="confirmarParadaMaquina()">
+        Confirmar parada
+      </button>
+      <button onclick="document.getElementById('parada-maq-box').remove()"
+        style="padding:7px 14px;background:var(--surface);border:1px solid var(--border2);border-radius:7px;cursor:pointer;font-size:13px;">
+        Cancelar
+      </button>
+    </div>`;
+  wrap.prepend(extra);
+}
+
+async function confirmarParadaMaquina(){
+  const hi  = document.getElementById('pm-hi')?.value;
+  const mot = document.getElementById('pm-mot')?.value;
+  const obs = document.getElementById('pm-obs')?.value.trim();
+  if(!mot){alert('Selecione o motivo de parada.');return}
+  try{
+    await apiPost('/api/apontamentos',{
+      data:          new Date().toISOString().split('T')[0],
+      hora_inicio:   hi,
+      cod_parada:    mot,
+      motivo_parada: mot,
+      classe_parada: PLANEJADAS.includes(mot)?'Planejada':'Não planejada',
+      observacao:    obs||'',
+      status:        'em_producao',
+      tipo_registro: 'parada_maquina',
+    });
+    renderAbertas(document.getElementById('abertas-wrap'));
+  }catch(e){alert('Erro: '+e.message)}
+}
+
+/* Abre o retorno de uma parada ativa */
+function abrirRetornoParada(id){
+  const box = document.getElementById('retorno-box-'+id);
+  box.innerHTML=`
+    <div style="background:var(--surface2);border-radius:8px;padding:14px;margin-top:10px;border:1px solid var(--border2);">
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;">▶ Retornar à produção</div>
+      <div class="field"><label>Hora de retorno</label><input type="time" id="ret-hf-${id}" value="${nowHM()}"></div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="btn-primary" style="width:auto;background:var(--green-text);padding:7px 16px;" onclick="confirmarRetornoParada('${id}')">
+          ✅ Confirmar retorno
+        </button>
+        <button onclick="document.getElementById('retorno-box-${id}').innerHTML=''"
+          style="padding:7px 14px;background:var(--surface);border:1px solid var(--border2);border-radius:7px;cursor:pointer;font-size:13px;">
+          Cancelar
+        </button>
+      </div>
+    </div>`;
+}
+
+async function confirmarRetornoParada(id){
+  const hf = document.getElementById('ret-hf-'+id)?.value;
+  if(!hf){alert('Informe a hora de retorno.');return}
+  try{
+    // Fecha a parada
+    await apiPatch(`/api/apontamentos/${id}`,{hora_fim:hf, status:'parada'});
+    renderAbertas(document.getElementById('abertas-wrap'));
+  }catch(e){alert('Erro: '+e.message)}
+}
+
+/* Abre justificativa para lacuna de tempo */
+function abrirJustificativaLacuna(de, ate){
+  const wrap = document.getElementById('abertas-wrap');
+  const extra = document.createElement('div');
+  extra.id = 'lacuna-box';
+  extra.className = 'card';
+  extra.style.borderLeft = '4px solid #f59e0b';
+  extra.innerHTML=`
+    <div class="card-title" style="color:#92400e;">⚠️ Justificar lacuna ${de} → ${ate}</div>
+    <div class="field"><label>Motivo</label>${motivosSelect('lac-mot')}</div>
+    <div class="field"><label>Observação</label><input type="text" id="lac-obs" placeholder="O que aconteceu nesse período?"></div>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button class="btn-primary" style="width:auto;background:#f59e0b;padding:7px 16px;" onclick="confirmarLacuna('${de}','${ate}')">
+        Confirmar
+      </button>
+      <button onclick="document.getElementById('lacuna-box').remove()"
+        style="padding:7px 14px;background:var(--surface);border:1px solid var(--border2);border-radius:7px;cursor:pointer;font-size:13px;">
+        Cancelar
+      </button>
+    </div>`;
+  wrap.prepend(extra);
+}
+
+async function confirmarLacuna(hi, hf){
+  const mot = document.getElementById('lac-mot')?.value;
+  const obs = document.getElementById('lac-obs')?.value.trim();
+  if(!mot){alert('Selecione o motivo.');return}
+  try{
+    await apiPost('/api/apontamentos',{
+      data:          new Date().toISOString().split('T')[0],
+      hora_inicio:   hi,
+      hora_fim:      hf,
+      cod_parada:    mot,
+      motivo_parada: mot,
+      classe_parada: PLANEJADAS.includes(mot)?'Planejada':'Não planejada',
+      observacao:    obs||'',
+      status:        'parada',
+      tipo_registro: 'parada_maquina',
+    });
+    renderAbertas(document.getElementById('abertas-wrap'));
+  }catch(e){alert('Erro: '+e.message)}
 }
 
 /* Encerra uma parada geral (fecha o horario, machine volta a rodar) */

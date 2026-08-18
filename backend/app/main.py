@@ -142,6 +142,7 @@ async def init_data():
 class ApontamentoCreate(BaseModel):
     data: str
     hora_inicio: str
+    hora_fim: Optional[str] = None
     ordem_processo: Optional[str] = None
     produto: Optional[str] = None
     placa: Optional[str] = None
@@ -149,8 +150,10 @@ class ApontamentoCreate(BaseModel):
     embalagem: Optional[str] = None
     observacao: Optional[str] = None
     cod_parada: Optional[str] = None
+    motivo_parada: Optional[str] = None
+    classe_parada: Optional[str] = None
     status: str
-    tipo_registro: str
+    tipo_registro: str  # producao | parada_geral | parada_maquina
     retomada_de: Optional[str] = None
 
 class ApontamentoPatch(BaseModel):
