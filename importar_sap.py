@@ -83,7 +83,15 @@ def importar(arquivo, token):
     try:
         with urllib.request.urlopen(req) as resp:
             data = json.loads(resp.read().decode())
-            print(f"✅ {data['importados']} registros importados para {data['data']}.")
+            importados = data.get('importados', 0)
+            ignorados  = data.get('ignorados', 0)
+            data_imp   = data.get('data', '-')
+            if importados == 0:
+                print(f"⚠️  Nenhuma ordem nova importada. {ignorados} ordem(ns) já foram produzidas e foram ignoradas.")
+            else:
+                print(f"✅ {importados} registros importados para {data_imp}.")
+                if ignorados:
+                    print(f"ℹ️  {ignorados} ordem(ns) ignorada(s) por já terem sido produzidas.")
     except urllib.error.HTTPError as e:
         print(f"❌ Erro HTTP {e.code}: {e.read().decode()}")
 
