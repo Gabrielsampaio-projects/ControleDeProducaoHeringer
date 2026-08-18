@@ -158,9 +158,12 @@ class ApontamentoPatch(BaseModel):
     status: Optional[str] = None
     volume_produzido: Optional[float] = None
     rejeito: Optional[str] = None
+    rejeito_ton: Optional[float] = None
     cod_parada: Optional[str] = None
+    motivo_parada: Optional[str] = None
+    classe_parada: Optional[str] = None
     observacao: Optional[str] = None
-    retomada: Optional[bool] = None  
+    retomada: Optional[bool] = None
 
 @app.get("/api/apontamentos")
 async def get_apontamentos(
@@ -241,7 +244,7 @@ async def get_apontamento(id: str, sess: dict = Depends(verificar_token)):
 @app.get("/api/sap")
 async def get_sap(sess: dict = Depends(verificar_token)):
     http = app.state.http
-    sap_rows, prod_rows = await asyncio.gather(
+    sap_rows, prod_rows = await __import__("asyncio").gather(
         sb_get(http, "sequenciamento_sap", "?order=data_criacao.asc,hora_criacao.asc"),
         sb_get(http, "producao_apontamentos",
                "?status=in.(em_producao,produzido)&select=ordem_processo,status"),
@@ -325,35 +328,13 @@ async def importar_sap(
         raise HTTPException(400, "Nenhum registro válido encontrado no arquivo")
 
     http = app.state.http
-
-    # Busca ordens já produzidas no banco para não reimportar
-    prod_rows = await sb_get(http, "producao_apontamentos",
-                             "?status=eq.produzido&select=ordem_processo")
-    produzidas = {r["ordem_processo"] for r in prod_rows if r.get("ordem_processo")}
-
-    # Filtra: não importa ordens que já foram produzidas
-    total_original = len(registros)
-    registros = [r for r in registros if r.get("ordem_processo") not in produzidas]
-    ignorados = total_original - len(registros)
-
-    if not registros:
-        return {"importados": 0, "ignorados": ignorados, "data": None,
-                "msg": "Todas as ordens já foram produzidas — nada importado."}
-
-    http = app.state.http
-    # Apaga os registros da data antes de reinserir (evita duplicatas)
+    # Apaga os registros da data antes de reinserir
     data_hoje = registros[0]["data_criacao"]
     if data_hoje:
-        await sb_delete(http, "sequenciamento_sap", f"?data_criacao=eq.{data_hoje}&ordem_processo=not.in.({','.join(produzidas) if produzidas else 'null'})")
-    
-    # Também remove qualquer registro com as mesmas ordens de outras datas
-    for r in registros:
-        op = r.get("ordem_processo")
-        if op:
-            await sb_delete(http, "sequenciamento_sap", f"?ordem_processo=eq.{op}")
+        await sb_delete(http, "sequenciamento_sap", f"?data_criacao=eq.{data_hoje}")
 
     await sb_post(http, "sequenciamento_sap", registros)
-    return {"importados": len(registros), "ignorados": ignorados, "data": data_hoje}
+    return {"importados": len(registros), "data": data_hoje}
 
 # ── health check ──────────────────────────────────────────────────────────────
 @app.get("/")
