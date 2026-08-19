@@ -8,17 +8,3 @@ pandas==2.2.3
 openpyxl==3.1.5
 python-multipart==0.0.9
 pydantic==2.9.2
-
-
-| Biblioteca                    |  Versão | Função principal                                 |
-| ----------------------------- | ------: | ------------------------------------------------ |
-| **fastapi**                   | 0.115.0 | Criação da API/backend                           |
-| **uvicorn[standard]**         |  0.30.6 | Servidor que executa a API FastAPI               |
-| **httpx**                     |  0.27.2 | Fazer requisições HTTP para outras APIs/sistemas |
-| **python-jose[cryptography]** |   3.3.0 | Criar e validar tokens JWT                       |
-| **PyJWT**                     |   2.9.0 | Trabalhar com JWT                                |
-| **python-dotenv**             |   1.0.1 | Carregar configurações e senhas do `.env`        |
-| **pandas**                    |   2.2.3 | Manipulação e análise de dados/tabelas           |
-| **openpyxl**                  |   3.1.5 | Ler e escrever arquivos Excel `.xlsx`            |
-| **python-multipart**          |   0.0.9 | Receber arquivos/formulários enviados para a API |
-| **pydantic**                  |   2.9.2 | Validação dos dados recebidos pela API           |
