@@ -242,41 +242,6 @@ async def get_apontamento(id: str, sess: dict = Depends(verificar_token)):
     return rows[0]
 
 # ══════════════════════════════════════════════════════════════════════════════
-# OEE
-# ══════════════════════════════════════════════════════════════════════════════
-@app.get("/api/oee")
-async def get_oee(
-    data: Optional[str] = None,
-    maquina_id: Optional[str] = None,
-    sess: dict = Depends(verificar_token),
-):
-    http = app.state.http
-    dia = data or datetime.date.today().isoformat()
-
-    if not sess["master"] and not maquina_id:
-        maquina_id = sess["maquina_id"]
-
-    # Busca todos os apontamentos do dia para calcular OEE no frontend
-    ap_params = f"?data=eq.{dia}&order=maquina_nome.asc,hora_inicio.asc"
-    if maquina_id:
-        ap_params += f"&maquina_id=eq.{maquina_id}"
-    rows = await sb_get(http, "producao_apontamentos", ap_params)
-
-    # Tenta buscar da view (pode estar vazia se não há dados suficientes)
-    try:
-        resumo_params = f"?data=eq.{dia}&order=maquina_nome.asc,turno.asc"
-        if maquina_id:
-            resumo_params += f"&maquina_id=eq.{maquina_id}"
-        resumo = await sb_get(http, "vw_oee_diario", resumo_params)
-    except Exception:
-        resumo = []
-
-    # Paradas para pareto
-    paradas = [r for r in rows if r.get("status") == "parada" and r.get("hora_fim")]
-
-    return {"resumo": resumo, "paradas": paradas, "rows": rows}
-
-# ══════════════════════════════════════════════════════════════════════════════
 # EMISSÕES SAP
 # ══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/sap")
@@ -301,25 +266,11 @@ async def get_sap(sess: dict = Depends(verificar_token)):
             result.append({**r, "_status_real": st})
     return result
 
-class PreSeqPayload(BaseModel):
-    valor: bool
-    ensaque_destino: Optional[str] = None
-    maquina_destino_id: Optional[str] = None
-    maquina_destino_nome: Optional[str] = None
-
 @app.patch("/api/sap/{id}/pre-seq")
-async def toggle_pre_seq(id: str, body: PreSeqPayload, sess: dict = Depends(verificar_token)):
+async def toggle_pre_seq(id: str, valor: bool, sess: dict = Depends(verificar_token)):
     http = app.state.http
-    patch = {"pre_sequenciamento": body.valor}
-    if body.valor:
-        patch["ensaque_destino"]      = body.ensaque_destino
-        patch["maquina_destino_id"]   = body.maquina_destino_id or str(sess["maquina_id"])
-        patch["maquina_destino_nome"] = body.maquina_destino_nome or sess["maquina_nome"]
-    else:
-        patch["ensaque_destino"]      = None
-        patch["maquina_destino_id"]   = None
-        patch["maquina_destino_nome"] = None
-    await sb_patch(http, "sequenciamento_sap", f"?id=eq.{id}", patch)
+    await sb_patch(http, "sequenciamento_sap", f"?id=eq.{id}",
+                   {"pre_sequenciamento": valor})
     return {"ok": True}
 
 # ══════════════════════════════════════════════════════════════════════════════
