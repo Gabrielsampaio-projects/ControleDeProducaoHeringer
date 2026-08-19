@@ -253,26 +253,28 @@ async def get_oee(
     http = app.state.http
     dia = data or datetime.date.today().isoformat()
 
-    # Operador só vê a própria máquina (mesma regra usada em /api/apontamentos)
     if not sess["master"] and not maquina_id:
         maquina_id = sess["maquina_id"]
 
-    params = f"?data=eq.{dia}&order=maquina_nome.asc,turno.asc"
-    if maquina_id:
-        params += f"&maquina_id=eq.{maquina_id}"
-    resumo = await sb_get(http, "vw_oee_diario", params)
-
-    # Paradas do dia (linhas cruas, já filtradas) para montar o Pareto no front
-    ap_params = (
-        f"?data=eq.{dia}&status=eq.parada&tipo_registro=eq.producao"
-        f"&hora_fim=not.is.null"
-        f"&select=maquina_id,maquina_nome,turno,motivo_parada,classe_parada,hora_inicio,hora_fim"
-    )
+    # Busca todos os apontamentos do dia para calcular OEE no frontend
+    ap_params = f"?data=eq.{dia}&order=maquina_nome.asc,hora_inicio.asc"
     if maquina_id:
         ap_params += f"&maquina_id=eq.{maquina_id}"
-    paradas = await sb_get(http, "producao_apontamentos", ap_params)
+    rows = await sb_get(http, "producao_apontamentos", ap_params)
 
-    return {"resumo": resumo, "paradas": paradas}
+    # Tenta buscar da view (pode estar vazia se não há dados suficientes)
+    try:
+        resumo_params = f"?data=eq.{dia}&order=maquina_nome.asc,turno.asc"
+        if maquina_id:
+            resumo_params += f"&maquina_id=eq.{maquina_id}"
+        resumo = await sb_get(http, "vw_oee_diario", resumo_params)
+    except Exception:
+        resumo = []
+
+    # Paradas para pareto
+    paradas = [r for r in rows if r.get("status") == "parada" and r.get("hora_fim")]
+
+    return {"resumo": resumo, "paradas": paradas, "rows": rows}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # EMISSÕES SAP
@@ -280,7 +282,7 @@ async def get_oee(
 @app.get("/api/sap")
 async def get_sap(sess: dict = Depends(verificar_token)):
     http = app.state.http
-    sap_rows, prod_rows = await asyncio.gather(
+    sap_rows, prod_rows = await __import__("asyncio").gather(
         sb_get(http, "sequenciamento_sap", "?order=data_criacao.asc,hora_criacao.asc"),
         sb_get(http, "producao_apontamentos",
                "?status=in.(em_producao,produzido)&select=ordem_processo,status"),
@@ -310,73 +312,15 @@ async def toggle_pre_seq(id: str, body: PreSeqPayload, sess: dict = Depends(veri
     http = app.state.http
     patch = {"pre_sequenciamento": body.valor}
     if body.valor:
-        patch["ensaque_destino"]     = body.ensaque_destino
-        patch["maquina_destino_id"]  = body.maquina_destino_id or sess["maquina_id"]
-        patch["maquina_destino_nome"]= body.maquina_destino_nome or sess["maquina_nome"]
+        patch["ensaque_destino"]      = body.ensaque_destino
+        patch["maquina_destino_id"]   = body.maquina_destino_id or str(sess["maquina_id"])
+        patch["maquina_destino_nome"] = body.maquina_destino_nome or sess["maquina_nome"]
     else:
         patch["ensaque_destino"]      = None
         patch["maquina_destino_id"]   = None
         patch["maquina_destino_nome"] = None
     await sb_patch(http, "sequenciamento_sap", f"?id=eq.{id}", patch)
     return {"ok": True}
-
-# ── retornar de parada: fecha parada e reabre ordem em producao ──────────────
-@app.post("/api/apontamentos/{id}/retornar")
-async def retornar_parada(id: str, sess: dict = Depends(verificar_token)):
-    """
-    Fecha o registro de parada_maquina (id) e cria novo registro
-    em_producao retomando a última ordem produzida desta máquina.
-    """
-    http = app.state.http
-
-    # 1. Busca a parada atual para pegar hora de retorno e retomada_de
-    parada_rows = await sb_get(http, "producao_apontamentos", f"?id=eq.{id}")
-    if not parada_rows:
-        raise HTTPException(404, "Parada não encontrada")
-    parada = parada_rows[0]
-
-    hora_retorno = datetime.datetime.now().strftime("%H:%M")
-    hoje = datetime.date.today().isoformat()
-
-    # 2. Fecha a parada
-    await sb_patch(http, "producao_apontamentos", f"?id=eq.{id}",
-                   {"hora_fim": hora_retorno, "status": "parada"})
-
-    # 3. Busca a última ordem produzida desta máquina para retomar
-    origem_id = parada.get("retomada_de")
-    if origem_id:
-        origem_rows = await sb_get(http, "producao_apontamentos",
-                                   f"?id=eq.{origem_id}&select=ordem_processo,produto,placa,ensaque,embalagem")
-        origem = origem_rows[0] if origem_rows else {}
-    else:
-        # Busca última ordem finalizada da máquina hoje
-        ult = await sb_get(http, "producao_apontamentos",
-                           f"?maquina_id=eq.{sess['maquina_id']}&tipo_registro=eq.producao"
-                           f"&data=eq.{hoje}&order=hora_fim.desc&limit=1")
-        origem = ult[0] if ult else {}
-
-    # 4. Cria novo registro em producao retomando a ordem
-    novo = {
-        "data":           hoje,
-        "hora_inicio":    hora_retorno,
-        "ordem_processo": origem.get("ordem_processo"),
-        "produto":        origem.get("produto"),
-        "placa":          origem.get("placa"),
-        "ensaque":        origem.get("ensaque"),
-        "embalagem":      origem.get("embalagem"),
-        "status":         "em_producao",
-        "tipo_registro":  "producao",
-        "retomada_de":    origem_id or parada.get("id"),
-        "usuario_id":     sess["usuario_id"],
-        "maquina_id":     sess["maquina_id"],
-        "turno":          sess["turno"],
-        "supervisor_id":  sess["supervisor_id"],
-        "operador_nome":  sess["nome"],
-        "supervisor_nome":sess["supervisor_nome"],
-        "maquina_nome":   sess["maquina_nome"],
-    }
-    result = await sb_post(http, "producao_apontamentos", novo)
-    return result[0] if result else {"ok": True}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ETAPA 3 — IMPORTAÇÃO SAP VIA UPLOAD
@@ -444,25 +388,7 @@ async def importar_sap(
     await sb_post(http, "sequenciamento_sap", registros)
     return {"importados": len(registros), "data": data_hoje}
 
-# ── health check + keepalive ──────────────────────────────────────────────────
+# ── health check ──────────────────────────────────────────────────────────────
 @app.get("/")
 def health():
     return {"status": "ok", "app": "Heringer Produção API"}
-
-@app.get("/ping")
-def ping():
-    return {"pong": True}
-
-async def keepalive():
-    await asyncio.sleep(60)
-    while True:
-        try:
-            async with httpx.AsyncClient() as c:
-                await c.get("https://controledeproducaoheringer-production.up.railway.app/ping", timeout=10)
-        except Exception:
-            pass
-        await asyncio.sleep(600)
-
-@app.on_event("startup")
-async def startup_keepalive():
-    asyncio.create_task(keepalive())

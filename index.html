@@ -1526,7 +1526,11 @@ async function renderOEE(c){
       ? `/api/oee?data=${hoje}`
       : `/api/oee?maquina_id=${session.maquina_id}&data=${hoje}`;
 
-    const { resumo, paradas } = await apiGet(filtro);
+    const oeeResp = await apiGet(filtro);
+    const resumo = oeeResp.resumo || [];
+    const paradas = oeeResp.paradas || [];
+    // rows = todos os apontamentos do dia (producao + parada) para cálculo no front
+    const rows = oeeResp.rows || [];
 
     const PADRAO_TH = 18.8; // referência exibida no aviso do topo (cálculo real vem da view)
 
