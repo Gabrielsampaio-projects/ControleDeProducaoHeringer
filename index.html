@@ -1399,31 +1399,26 @@ async function renderOEE(c){
   try{
     const hoje = new Date().toISOString().split('T')[0];
     const filtro = session.master
-      ? `/api/apontamentos?data=${hoje}&order=maquina_nome.asc,turno.asc`
-      : `/api/apontamentos?maquina_id=${session.maquina_id}&data=${hoje}&order=turno.asc`;
+      ? `/api/oee?data=${hoje}`
+      : `/api/oee?maquina_id=${session.maquina_id}&data=${hoje}`;
 
-    const rows = await apiGet(filtro);
+    const { resumo, paradas } = await apiGet(filtro);
 
-    const grupos = {};
-    rows.forEach(r=>{
-      const key = `${r.maquina_id}__${r.turno||'Sem turno'}`;
-      if(!grupos[key]) grupos[key]={maquina_nome:r.maquina_nome,turno:r.turno||'Sem turno',registros:[]};
-      grupos[key].registros.push(r);
-    });
-
-    const horasTurno = {
-      '1ºT - 07:00/16:48':8.6,'2ºT - 15:30/00:54':8.1,
-      '3ºT - 23:30/08:12':7.3,'Adm - 07:00/16:48':9.8
-    };
-    const PADRAO_TH = 18.8;
-    const planejadas = ['Sobreposição Turno','Limpeza Semanal','Linha Não Programada para Operar',
-      'Manutenção Preventiva','Parada de Manutenção Anual','Refeição','DDS','Reuniões e Treinamentos'];
+    const PADRAO_TH = 18.8; // referência exibida no aviso do topo (cálculo real vem da view)
 
     function calcDurH(hi,hf){
       if(!hi||!hf) return 0;
       const [hh,mm]=hi.split(':').map(Number), [eh,em]=hf.split(':').map(Number);
       let diff=(eh*60+em)-(hh*60+mm); if(diff<0) diff+=1440; return diff/60;
     }
+
+    // Agrupa paradas cruas por maquina+turno pra montar o Pareto de cada card
+    const paradasPorGrupo = {};
+    paradas.forEach(r=>{
+      const key = `${r.maquina_id}__${r.turno||'Sem turno'}`;
+      if(!paradasPorGrupo[key]) paradasPorGrupo[key]=[];
+      paradasPorGrupo[key].push(r);
+    });
 
     function gauge(val,label,color){
       const r=26,circ=2*Math.PI*r,offset=circ*(1-val/100);
@@ -1439,26 +1434,24 @@ async function renderOEE(c){
       </div>`;
     }
 
-    function oeeCard(key){
-      const g=grupos[key], recs=g.registros, hTurno=horasTurno[g.turno]||8;
-      const hProd=recs.filter(r=>r.status==='produzido'&&r.tipo_registro==='producao'&&r.hora_fim).reduce((s,r)=>s+calcDurH(r.hora_inicio,r.hora_fim),0);
-      const volTotal=recs.filter(r=>r.status==='produzido').reduce((s,r)=>s+(r.volume_produzido||0),0);
-      const volRejeito=recs.reduce((s,r)=>s+(r.rejeito_ton||0),0);
-      const hParadaNP=recs.filter(r=>r.status==='parada'&&r.hora_fim&&!planejadas.includes(r.cod_parada)).reduce((s,r)=>s+calcDurH(r.hora_inicio,r.hora_fim),0);
-      const hParadaP=recs.filter(r=>r.status==='parada'&&r.hora_fim&&planejadas.includes(r.cod_parada)).reduce((s,r)=>s+calcDurH(r.hora_inicio,r.hora_fim),0);
-      const disp=hTurno>0?Math.min(hProd/hTurno*100,100):0;
-      const perf=hProd>0?Math.min(volTotal/(hProd*PADRAO_TH)*100,100):0;
-      const qual=volTotal>0?(volTotal-volRejeito)/volTotal*100:100;
-      const oee=disp*perf*qual/10000;
-      const oeeColor=oee>=85?'#22c55e':oee>=65?'#f59e0b':'#CA2535';
+    function oeeCard(g){
+      const key = `${g.maquina_id}__${g.turno||'Sem turno'}`;
+      const disp = Number(g.disponibilidade_pct)||0;
+      const perf = Number(g.performance_pct)||0;
+      const qual = Number(g.qualidade_pct)||0;
+      const oee  = Number(g.oee_pct)||0;
+      const oeeColor = oee>=85?'#22c55e':oee>=65?'#f59e0b':'#CA2535';
 
+      const recs = paradasPorGrupo[key] || [];
       const paradaMap={};
-      recs.filter(r=>r.status==='parada'&&r.hora_fim).forEach(r=>{
-        const mot=r.cod_parada||'Sem motivo';
+      recs.forEach(r=>{
+        const mot=r.motivo_parada||'Sem motivo';
         paradaMap[mot]=(paradaMap[mot]||0)+calcDurH(r.hora_inicio,r.hora_fim);
       });
-      const paradas=Object.entries(paradaMap).sort((a,b)=>b[1]-a[1]);
-      const totalParada=paradas.reduce((s,[,h])=>s+h,0);
+      const paradasList=Object.entries(paradaMap).sort((a,b)=>b[1]-a[1]);
+      const totalParada=paradasList.reduce((s,[,h])=>s+h,0);
+      const planejadaMap={};
+      recs.forEach(r=>{ planejadaMap[r.motivo_parada]= r.classe_parada==='Planejada'; });
 
       return `<div class="card" style="margin-bottom:16px;">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
@@ -1478,36 +1471,36 @@ async function renderOEE(c){
         </div>
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">
           <div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:18px;font-weight:700;color:var(--text);">${hProd.toFixed(1)}h</div>
+            <div style="font-size:18px;font-weight:700;color:var(--text);">${Number(g.horas_producao).toFixed(1)}h</div>
             <div style="font-size:10px;color:var(--text3);">Horas produzindo</div>
           </div>
           <div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:18px;font-weight:700;color:var(--text);">${volTotal.toFixed(2)}t</div>
+            <div style="font-size:18px;font-weight:700;color:var(--text);">${Number(g.volume_total).toFixed(2)}t</div>
             <div style="font-size:10px;color:var(--text3);">Volume produzido</div>
           </div>
           <div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:18px;font-weight:700;color:var(--amber-text);">${hParadaNP.toFixed(1)}h</div>
+            <div style="font-size:18px;font-weight:700;color:var(--amber-text);">${Number(g.horas_parada_nao_plan).toFixed(1)}h</div>
             <div style="font-size:10px;color:var(--text3);">Paradas não plan.</div>
           </div>
           <div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:18px;font-weight:700;color:var(--text3);">${hParadaP.toFixed(1)}h</div>
+            <div style="font-size:18px;font-weight:700;color:var(--text3);">${Number(g.horas_parada_plan).toFixed(1)}h</div>
             <div style="font-size:10px;color:var(--text3);">Paradas plan.</div>
           </div>
         </div>
-        ${paradas.length?`
+        ${paradasList.length?`
         <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;">Pareto de paradas</div>
-        ${paradas.map(([mot,h])=>`
+        ${paradasList.map(([mot,h])=>`
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
             <div style="font-size:12px;color:var(--text);width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${mot}</div>
             <div style="flex:1;background:var(--border2);border-radius:4px;height:8px;overflow:hidden;">
-              <div style="width:${totalParada>0?(h/totalParada*100).toFixed(1):0}%;height:100%;background:${planejadas.includes(mot)?'var(--text3)':'var(--brand)'};border-radius:4px;"></div>
+              <div style="width:${totalParada>0?(h/totalParada*100).toFixed(1):0}%;height:100%;background:${planejadaMap[mot]?'var(--text3)':'var(--brand)'};border-radius:4px;"></div>
             </div>
             <div style="font-size:12px;color:var(--text2);width:40px;text-align:right;">${h.toFixed(1)}h</div>
           </div>`).join('')}`:'<div class="empty">Nenhuma parada registrada.</div>'}
       </div>`;
     }
 
-    const cards=Object.keys(grupos).map(oeeCard).join('');
+    const cards = resumo.map(oeeCard).join('');
     c.innerHTML=`
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
         <p class="section-title" style="margin:0;">OEE — ${session.master?'Todos os maquinários':session.maquina_nome} — ${hoje}</p>
@@ -1516,7 +1509,7 @@ async function renderOEE(c){
       <div style="background:var(--surface2);border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:12px;color:var(--text2);">
         📊 Padrão: <strong>${PADRAO_TH} t/h</strong> · Meta OEE: <strong>≥ 85%</strong> 🟢 · Entre 65–84% 🟡 · Abaixo de 65% 🔴
       </div>
-      ${!Object.keys(grupos).length?'<div class="empty">Nenhum apontamento registrado hoje para calcular OEE.</div>':cards}`;
+      ${!resumo.length?'<div class="empty">Nenhum apontamento registrado hoje para calcular OEE.</div>':cards}`;
   }catch(e){c.innerHTML=`<div class="alert alert-err">${icons.err}<span>Erro: ${e.message}</span></div>`}
 }
 

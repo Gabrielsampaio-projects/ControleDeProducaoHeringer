@@ -242,6 +242,39 @@ async def get_apontamento(id: str, sess: dict = Depends(verificar_token)):
     return rows[0]
 
 # ══════════════════════════════════════════════════════════════════════════════
+# OEE
+# ══════════════════════════════════════════════════════════════════════════════
+@app.get("/api/oee")
+async def get_oee(
+    data: Optional[str] = None,
+    maquina_id: Optional[str] = None,
+    sess: dict = Depends(verificar_token),
+):
+    http = app.state.http
+    dia = data or datetime.date.today().isoformat()
+
+    # Operador só vê a própria máquina (mesma regra usada em /api/apontamentos)
+    if not sess["master"] and not maquina_id:
+        maquina_id = sess["maquina_id"]
+
+    params = f"?data=eq.{dia}&order=maquina_nome.asc,turno.asc"
+    if maquina_id:
+        params += f"&maquina_id=eq.{maquina_id}"
+    resumo = await sb_get(http, "vw_oee_diario", params)
+
+    # Paradas do dia (linhas cruas, já filtradas) para montar o Pareto no front
+    ap_params = (
+        f"?data=eq.{dia}&status=eq.parada&tipo_registro=eq.producao"
+        f"&hora_fim=not.is.null"
+        f"&select=maquina_id,maquina_nome,turno,motivo_parada,classe_parada,hora_inicio,hora_fim"
+    )
+    if maquina_id:
+        ap_params += f"&maquina_id=eq.{maquina_id}"
+    paradas = await sb_get(http, "producao_apontamentos", ap_params)
+
+    return {"resumo": resumo, "paradas": paradas}
+
+# ══════════════════════════════════════════════════════════════════════════════
 # EMISSÕES SAP
 # ══════════════════════════════════════════════════════════════════════════════
 @app.get("/api/sap")
