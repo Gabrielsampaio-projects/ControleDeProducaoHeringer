@@ -172,6 +172,14 @@ class RetornoPayload(BaseModel):
     # O frontend atual envia {}, portanto a API usa a hora do servidor quando omitido.
     hora_fim: Optional[str] = None
 
+class PreSeqPayload(BaseModel):
+    # O modal envia estes campos no corpo JSON. `valor` também pode vir na query
+    # para manter compatibilidade com o fluxo de início da fila pré-sequenciada.
+    valor: Optional[bool] = None
+    ensaque_destino: Optional[str] = None
+    maquina_destino_id: Optional[str] = None
+    maquina_destino_nome: Optional[str] = None
+
 @app.get("/api/apontamentos")
 async def get_apontamentos(
     maquina_id: Optional[str] = None,
@@ -476,11 +484,42 @@ async def get_sap(sess: dict = Depends(verificar_token)):
     return result
 
 @app.patch("/api/sap/{id}/pre-seq")
-async def toggle_pre_seq(id: str, valor: bool, sess: dict = Depends(verificar_token)):
+async def toggle_pre_seq(
+    id: str,
+    body: Optional[PreSeqPayload] = None,
+    valor: Optional[bool] = None,
+    sess: dict = Depends(verificar_token),
+):
+    """Ativa ou remove o pré-sequenciamento de uma ordem SAP.
+
+    Aceita tanto o JSON enviado pelo modal de confirmação quanto o formato
+    legado `?valor=false` usado ao iniciar uma ordem da fila.
+    """
     http = app.state.http
-    await sb_patch(http, "sequenciamento_sap", f"?id=eq.{id}",
-                   {"pre_sequenciamento": valor})
-    return {"ok": True}
+    valor_final = body.valor if body and body.valor is not None else valor
+    if valor_final is None:
+        raise HTTPException(422, "Informe valor no JSON ou na query string")
+
+    payload = {"pre_sequenciamento": valor_final}
+    if valor_final:
+        if not body or not body.ensaque_destino or not body.maquina_destino_id:
+            raise HTTPException(400, "Informe ensaque_destino e maquina_destino_id")
+        payload.update({
+            "ensaque_destino": body.ensaque_destino,
+            "maquina_destino_id": body.maquina_destino_id,
+            "maquina_destino_nome": body.maquina_destino_nome or sess.get("maquina_nome"),
+        })
+    else:
+        # Evita deixar a fila antiga visível caso a ordem seja pré-sequenciada
+        # novamente para outra máquina/ensacadeira.
+        payload.update({
+            "ensaque_destino": None,
+            "maquina_destino_id": None,
+            "maquina_destino_nome": None,
+        })
+
+    await sb_patch(http, "sequenciamento_sap", f"?id=eq.{id}", payload)
+    return {"ok": True, "pre_sequenciamento": valor_final}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ETAPA 3 — IMPORTAÇÃO SAP VIA UPLOAD
