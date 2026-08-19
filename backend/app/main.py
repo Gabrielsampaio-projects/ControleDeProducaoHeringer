@@ -168,6 +168,10 @@ class ApontamentoPatch(BaseModel):
     observacao: Optional[str] = None
     retomada: Optional[bool] = None
 
+class RetornoPayload(BaseModel):
+    # O frontend atual envia {}, portanto a API usa a hora do servidor quando omitido.
+    hora_fim: Optional[str] = None
+
 @app.get("/api/apontamentos")
 async def get_apontamentos(
     maquina_id: Optional[str] = None,
@@ -240,6 +244,211 @@ async def get_apontamento(id: str, sess: dict = Depends(verificar_token)):
     if not rows:
         raise HTTPException(404, "Não encontrado")
     return rows[0]
+
+# ── RETOMADA DE PARADA ─────────────────────────────────────────────────────────
+def _normalizar_hora_retorno(valor: Optional[str]) -> str:
+    if not valor:
+        return datetime.datetime.now().strftime("%H:%M:%S")
+    for formato in ("%H:%M", "%H:%M:%S"):
+        try:
+            return datetime.datetime.strptime(valor, formato).strftime("%H:%M:%S")
+        except ValueError:
+            continue
+    raise HTTPException(status_code=422, detail="hora_fim deve estar no formato HH:MM ou HH:MM:SS")
+
+
+def _id_inteiro(valor: str, campo: str = "id") -> int:
+    try:
+        numero = int(valor)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail=f"{campo} inválido")
+    if numero <= 0:
+        raise HTTPException(status_code=422, detail=f"{campo} inválido")
+    return numero
+
+
+async def _buscar_producao_retornada(http: httpx.AsyncClient, parada_id: int):
+    rows = await sb_get(
+        http,
+        "producao_apontamentos",
+        "?retomada_de=eq." + str(parada_id)
+        + "&tipo_registro=eq.producao&order=id.desc&limit=1",
+    )
+    return rows[0] if rows else None
+
+
+@app.post("/api/apontamentos/{id}/retornar")
+async def retornar_parada(
+    id: str,
+    body: RetornoPayload,
+    sess: dict = Depends(verificar_token),
+):
+    """Fecha a parada e reabre a ordem original, quando houver vínculo.
+
+    A operação é idempotente: repetir a chamada para a mesma parada não cria
+    uma segunda produção retomada. Para uma parada sem ordem vinculada, apenas
+    o registro da parada é encerrado.
+    """
+    parada_id = _id_inteiro(id)
+    hora_fim = _normalizar_hora_retorno(body.hora_fim)
+    http = app.state.http
+
+    parada_rows = await sb_get(
+        http,
+        "producao_apontamentos",
+        f"?id=eq.{parada_id}&select=*&limit=1",
+    )
+    if not parada_rows:
+        raise HTTPException(status_code=404, detail="Parada não encontrada")
+    parada = parada_rows[0]
+
+    if not sess.get("master") and str(parada.get("maquina_id")) != str(sess.get("maquina_id")):
+        raise HTTPException(status_code=403, detail="Parada fora do escopo da máquina selecionada")
+
+    if parada.get("tipo_registro") not in {"parada_maquina", "parada_geral"}:
+        raise HTTPException(status_code=409, detail="O registro informado não é uma parada retomável")
+
+    # Primeiro verifica se uma chamada anterior já criou a retomada.
+    existente = await _buscar_producao_retornada(http, parada_id)
+    if existente:
+        return {
+            "ok": True,
+            "retomada": True,
+            "id_parada": parada_id,
+            "parada": parada,
+            "producao": existente,
+        }
+
+    aberta = parada.get("status") == "em_producao" and not parada.get("hora_fim")
+    if not aberta:
+        return {
+            "ok": True,
+            "retomada": False,
+            "id_parada": parada_id,
+            "parada": parada,
+            "producao": None,
+        }
+
+    ordem = None
+    origem_id = parada.get("retomada_de")
+    if origem_id is not None:
+        origem_id = _id_inteiro(str(origem_id), "retomada_de")
+        origem_rows = await sb_get(
+            http,
+            "producao_apontamentos",
+            f"?id=eq.{origem_id}&select=*&limit=1",
+        )
+        if not origem_rows:
+            raise HTTPException(status_code=409, detail="A ordem original da parada não foi encontrada")
+        ordem = origem_rows[0]
+        if str(ordem.get("maquina_id")) != str(parada.get("maquina_id")):
+            raise HTTPException(status_code=409, detail="A ordem original pertence a outra máquina")
+
+    try:
+        await sb_patch(
+            http,
+            "producao_apontamentos",
+            f"?id=eq.{parada_id}",
+            {"hora_fim": hora_fim, "status": "parada", "retomada": True},
+        )
+
+        producao = None
+        if ordem:
+            payload = {
+                "usuario_id": sess["usuario_id"],
+                "maquina_id": sess["maquina_id"],
+                "turno": sess["turno"],
+                "supervisor_id": sess["supervisor_id"],
+                "operador_nome": sess["nome"],
+                "supervisor_nome": sess["supervisor_nome"],
+                "maquina_nome": sess["maquina_nome"],
+                "data": parada["data"],
+                "hora_inicio": hora_fim,
+                "ordem_processo": ordem.get("ordem_processo"),
+                "produto": ordem.get("produto"),
+                "placa": ordem.get("placa"),
+                "ensaque": ordem.get("ensaque"),
+                "embalagem": ordem.get("embalagem"),
+                "status": "em_producao",
+                "tipo_registro": "producao",
+                # No modelo real este campo aponta para a parada que está sendo retomada.
+                "retomada_de": parada_id,
+            }
+            producao_rows = await sb_post(http, "producao_apontamentos", payload)
+            producao = producao_rows[0] if producao_rows else None
+
+        return {
+            "ok": True,
+            "retomada": producao is not None,
+            "id_parada": parada_id,
+            "parada": {**parada, "hora_fim": hora_fim, "status": "parada", "retomada": True},
+            "producao": producao,
+        }
+    except Exception as exc:
+        # O Supabase REST não fornece transação entre dois endpoints. Fazemos
+        # uma compensação para não deixar a parada fechada sem a retomada.
+        try:
+            await sb_patch(
+                http,
+                "producao_apontamentos",
+                f"?id=eq.{parada_id}",
+                {"hora_fim": None, "status": "em_producao", "retomada": False},
+            )
+        except Exception:
+            pass
+        if isinstance(exc, HTTPException):
+            raise
+        raise HTTPException(status_code=502, detail="Não foi possível concluir a retomada da parada") from exc
+
+
+# ── OEE ───────────────────────────────────────────────────────────────────────
+@app.get("/api/oee")
+async def get_oee(
+    data: Optional[str] = None,
+    maquina_id: Optional[str] = None,
+    sess: dict = Depends(verificar_token),
+):
+    """Entrega o envelope esperado pela aba OEE do frontend."""
+    if data:
+        try:
+            datetime.datetime.strptime(data, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=422, detail="data deve estar no formato YYYY-MM-DD")
+    else:
+        data = datetime.datetime.now().strftime("%Y-%m-%d")
+
+    # Operador nunca pode escolher outra máquina via query string.
+    if not sess.get("master"):
+        maquina_id = str(sess.get("maquina_id"))
+    elif maquina_id is not None:
+        maquina_id = str(_id_inteiro(maquina_id, "maquina_id"))
+
+    filtro_view = f"?data=eq.{data}&order=maquina_nome.asc,turno.asc&limit=1000"
+    filtro_rows = (
+        "?data=eq." + data
+        + "&select=id,maquina_id,maquina_nome,data,turno,hora_inicio,hora_fim,status,"
+          "tipo_registro,ordem_processo,volume_produzido,rejeito,rejeito_ton,"
+          "cod_parada,motivo_parada,classe_parada,retomada,retomada_de&"
+          "order=maquina_id.asc,turno.asc,hora_inicio.asc&limit=1000"
+    )
+    if maquina_id:
+        filtro_view += f"&maquina_id=eq.{maquina_id}"
+        filtro_rows += f"&maquina_id=eq.{maquina_id}"
+
+    http = app.state.http
+    resumo, rows = await asyncio.gather(
+        sb_get(http, "vw_oee_diario", filtro_view),
+        sb_get(http, "producao_apontamentos", filtro_rows),
+    )
+
+    paradas = [
+        row for row in rows
+        if row.get("tipo_registro") in {"parada_maquina", "parada_geral"}
+        or row.get("status") == "parada"
+        or row.get("motivo_parada")
+    ]
+    return {"resumo": resumo, "paradas": paradas, "rows": rows}
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # EMISSÕES SAP
