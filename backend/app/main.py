@@ -280,7 +280,7 @@ async def get_oee(
 @app.get("/api/sap")
 async def get_sap(sess: dict = Depends(verificar_token)):
     http = app.state.http
-    sap_rows, prod_rows = await __import__("asyncio").gather(
+    sap_rows, prod_rows = await asyncio.gather(
         sb_get(http, "sequenciamento_sap", "?order=data_criacao.asc,hora_criacao.asc"),
         sb_get(http, "producao_apontamentos",
                "?status=in.(em_producao,produzido)&select=ordem_processo,status"),
@@ -299,12 +299,84 @@ async def get_sap(sess: dict = Depends(verificar_token)):
             result.append({**r, "_status_real": st})
     return result
 
+class PreSeqPayload(BaseModel):
+    valor: bool
+    ensaque_destino: Optional[str] = None
+    maquina_destino_id: Optional[str] = None
+    maquina_destino_nome: Optional[str] = None
+
 @app.patch("/api/sap/{id}/pre-seq")
-async def toggle_pre_seq(id: str, valor: bool, sess: dict = Depends(verificar_token)):
+async def toggle_pre_seq(id: str, body: PreSeqPayload, sess: dict = Depends(verificar_token)):
     http = app.state.http
-    await sb_patch(http, "sequenciamento_sap", f"?id=eq.{id}",
-                   {"pre_sequenciamento": valor})
+    patch = {"pre_sequenciamento": body.valor}
+    if body.valor:
+        patch["ensaque_destino"]     = body.ensaque_destino
+        patch["maquina_destino_id"]  = body.maquina_destino_id or sess["maquina_id"]
+        patch["maquina_destino_nome"]= body.maquina_destino_nome or sess["maquina_nome"]
+    else:
+        patch["ensaque_destino"]      = None
+        patch["maquina_destino_id"]   = None
+        patch["maquina_destino_nome"] = None
+    await sb_patch(http, "sequenciamento_sap", f"?id=eq.{id}", patch)
     return {"ok": True}
+
+# ── retornar de parada: fecha parada e reabre ordem em producao ──────────────
+@app.post("/api/apontamentos/{id}/retornar")
+async def retornar_parada(id: str, sess: dict = Depends(verificar_token)):
+    """
+    Fecha o registro de parada_maquina (id) e cria novo registro
+    em_producao retomando a última ordem produzida desta máquina.
+    """
+    http = app.state.http
+
+    # 1. Busca a parada atual para pegar hora de retorno e retomada_de
+    parada_rows = await sb_get(http, "producao_apontamentos", f"?id=eq.{id}")
+    if not parada_rows:
+        raise HTTPException(404, "Parada não encontrada")
+    parada = parada_rows[0]
+
+    hora_retorno = datetime.datetime.now().strftime("%H:%M")
+    hoje = datetime.date.today().isoformat()
+
+    # 2. Fecha a parada
+    await sb_patch(http, "producao_apontamentos", f"?id=eq.{id}",
+                   {"hora_fim": hora_retorno, "status": "parada"})
+
+    # 3. Busca a última ordem produzida desta máquina para retomar
+    origem_id = parada.get("retomada_de")
+    if origem_id:
+        origem_rows = await sb_get(http, "producao_apontamentos",
+                                   f"?id=eq.{origem_id}&select=ordem_processo,produto,placa,ensaque,embalagem")
+        origem = origem_rows[0] if origem_rows else {}
+    else:
+        # Busca última ordem finalizada da máquina hoje
+        ult = await sb_get(http, "producao_apontamentos",
+                           f"?maquina_id=eq.{sess['maquina_id']}&tipo_registro=eq.producao"
+                           f"&data=eq.{hoje}&order=hora_fim.desc&limit=1")
+        origem = ult[0] if ult else {}
+
+    # 4. Cria novo registro em producao retomando a ordem
+    novo = {
+        "data":           hoje,
+        "hora_inicio":    hora_retorno,
+        "ordem_processo": origem.get("ordem_processo"),
+        "produto":        origem.get("produto"),
+        "placa":          origem.get("placa"),
+        "ensaque":        origem.get("ensaque"),
+        "embalagem":      origem.get("embalagem"),
+        "status":         "em_producao",
+        "tipo_registro":  "producao",
+        "retomada_de":    origem_id or parada.get("id"),
+        "usuario_id":     sess["usuario_id"],
+        "maquina_id":     sess["maquina_id"],
+        "turno":          sess["turno"],
+        "supervisor_id":  sess["supervisor_id"],
+        "operador_nome":  sess["nome"],
+        "supervisor_nome":sess["supervisor_nome"],
+        "maquina_nome":   sess["maquina_nome"],
+    }
+    result = await sb_post(http, "producao_apontamentos", novo)
+    return result[0] if result else {"ok": True}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ETAPA 3 — IMPORTAÇÃO SAP VIA UPLOAD
@@ -372,7 +444,25 @@ async def importar_sap(
     await sb_post(http, "sequenciamento_sap", registros)
     return {"importados": len(registros), "data": data_hoje}
 
-# ── health check ──────────────────────────────────────────────────────────────
+# ── health check + keepalive ──────────────────────────────────────────────────
 @app.get("/")
 def health():
     return {"status": "ok", "app": "Heringer Produção API"}
+
+@app.get("/ping")
+def ping():
+    return {"pong": True}
+
+async def keepalive():
+    await asyncio.sleep(60)
+    while True:
+        try:
+            async with httpx.AsyncClient() as c:
+                await c.get("https://controledeproducaoheringer-production.up.railway.app/ping", timeout=10)
+        except Exception:
+            pass
+        await asyncio.sleep(600)
+
+@app.on_event("startup")
+async def startup_keepalive():
+    asyncio.create_task(keepalive())

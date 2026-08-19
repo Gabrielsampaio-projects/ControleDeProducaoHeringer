@@ -518,15 +518,24 @@ function renderSAPLista(c, rows, filtro){
           <strong>OP: ${r.ordem_processo||'-'}</strong>
           ${badges[r._status_real]||''}
           ${r._status_real==='aguardando'?`
-            <button onclick="togglePreSeq('${r.id}',${!r.pre_sequenciamento})"
+            <button onclick="togglePreSeq('${r.id}',true,{ordem_processo:'${r.ordem_processo}',descricao_material:'${(r.descricao_material||'').replace(/'/g,'&#39;')}',tipo_embalagem:'${r.tipo_embalagem||''}',ord_proc_qtd:${r.ord_proc_qtd||0}})"
               style="margin-left:auto;padding:4px 12px;border-radius:7px;border:1px solid var(--purple-text);background:var(--purple-bg);color:var(--purple-text);font-size:11px;font-weight:600;cursor:pointer;">
               + Pré-sequenciar
             </button>`:''}
           ${r._status_real==='pre_seq'?`
-            <button onclick="togglePreSeq('${r.id}',false)"
-              style="margin-left:auto;padding:4px 12px;border-radius:7px;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);font-size:11px;cursor:pointer;">
-              Remover fila
-            </button>`:''}
+            <div style="margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <span style="font-size:10px;padding:2px 8px;background:var(--surface2);border-radius:5px;color:var(--text2);">
+                ${r.maquina_destino_nome||''} · ${r.ensaque_destino||''}
+              </span>
+              ${String(r.maquina_destino_id)===String(session.maquina_id)?`
+                <button onclick="togglePreSeq('${r.id}',false,null)"
+                  style="padding:4px 10px;border-radius:7px;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);font-size:11px;cursor:pointer;">
+                  Remover fila
+                </button>`:`
+                <span style="padding:3px 8px;border-radius:5px;background:#fef3c7;color:#92400e;font-size:10px;">
+                  🔒 ${r.maquina_destino_nome||'Outra máquina'}
+                </span>`}
+            </div>`:''}
           <span style="font-size:11px;color:var(--text3);">${fmtDate(r.data_criacao)} ${r.hora_criacao||''}</span>
         </div>
         <div class="row-sub">
@@ -542,9 +551,57 @@ function renderSAPLista(c, rows, filtro){
     </div>`;
 }
 
-async function togglePreSeq(id, valor){
+/* Modal de pré-sequenciamento por ensaque */
+function abrirModalPreSeq(id, dadosSAP){
+  document.getElementById('modal-preseq')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'modal-preseq';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  const ens = ensaquesDisponiveis().map(e=>`<option value="${e}">${e}</option>`).join('');
+  modal.innerHTML=`
+    <div style="background:var(--surface);border-radius:12px;padding:24px;width:380px;max-width:95vw;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:4px;">Pré-sequenciar ordem</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">OP: ${dadosSAP.ordem_processo} · ${dadosSAP.descricao_material||''}</div>
+      <div class="field" style="margin-bottom:12px;">
+        <label>Ensacadeira de destino</label>
+        <select id="pms-ensaque" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:8px;font-size:13px;background:var(--surface);">
+          <option value="">Selecione...</option>${ens}
+        </select>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:16px;">Máquina: <strong>${session.maquina_nome}</strong></div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="confirmarPreSeq('${dadosSAP._id}',${JSON.stringify({ordem_processo:dadosSAP.ordem_processo,descricao_material:dadosSAP.descricao_material,tipo_embalagem:dadosSAP.tipo_embalagem,ord_proc_qtd:dadosSAP.ord_proc_qtd}).replace(/"/g,'&quot;')})"
+          class="btn-primary" style="flex:1;padding:10px;">✅ Confirmar pré-seq</button>
+        <button onclick="document.getElementById('modal-preseq').remove()"
+          style="padding:10px 16px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;cursor:pointer;font-size:13px;">Cancelar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function confirmarPreSeq(id, dadosSAP){
+  const ensaque = document.getElementById('pms-ensaque')?.value;
+  if(!ensaque){ alert('Selecione a ensacadeira.'); return; }
   try{
-    await apiPatch(`/api/sap/${id}/pre-seq?valor=${valor}`, {});
+    await api('PATCH', `/api/sap/${id}/pre-seq`, {
+      valor: true,
+      ensaque_destino: ensaque,
+      maquina_destino_id: String(session.maquina_id),
+      maquina_destino_nome: session.maquina_nome,
+    });
+    document.getElementById('modal-preseq')?.remove();
+    renderSAP(document.getElementById('tab-content'));
+  }catch(e){ alert('Erro: '+e.message); }
+}
+
+async function togglePreSeq(id, valor, dadosSAP){
+  if(valor && dadosSAP){
+    dadosSAP._id = id;
+    abrirModalPreSeq(id, dadosSAP);
+    return;
+  }
+  try{
+    await api('PATCH', `/api/sap/${id}/pre-seq`, {valor: false});
     renderSAP(document.getElementById('tab-content'));
   }catch(e){ alert('Erro ao atualizar: '+e.message); }
 }
@@ -797,6 +854,28 @@ async function registrarParadaGeral(){
 const PLANEJADAS = ['Sobreposição Turno','Limpeza Semanal','Linha Não Programada para Operar',
   'Manutenção Preventiva','Parada de Manutenção Anual','Refeição','DDS','Reuniões e Treinamentos'];
 
+const ENSAQUES_POR_MAQUINA = {
+  'M1': ['Ensaque 1', 'Ensaque 2', 'Ensaque BIG BAG'],
+  'M2': ['Ensaque 1', 'Ensaque 2'],
+  'M4': ['Ensaque 1', 'Ensaque 2'],
+  'M5': ['Ensaque 1', 'Ensaque 2'],
+};
+function ensaquesDisponiveis(){
+  const nome = session.maquina_nome || '';
+  for(const [k,v] of Object.entries(ENSAQUES_POR_MAQUINA)){
+    if(nome.includes(k)) return v;
+  }
+  return ['Ensaque 1','Ensaque 2'];
+}
+function ensaquesSelect(id, incluiTodos=false){
+  const opts = ensaquesDisponiveis();
+  return `<select id="${id}" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:8px;font-size:13px;background:var(--surface);">
+    ${incluiTodos?'<option value="todos">Máquina toda</option>':'<option value="">Selecione...</option>'}
+    ${opts.map(e=>`<option value="${e}">${e}</option>`).join('')}
+  </select>`;
+}
+
+
 function motivosSelect(idSelect){
   return `<select id="${idSelect}" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:8px;font-size:13px;background:var(--surface);">
     <option value="">Selecione o motivo...</option>
@@ -867,20 +946,38 @@ async function renderAbertas(c){
     const paradasAtivas= abertas.filter(r=>r.tipo_registro==='parada_geral'||r.tipo_registro==='parada_maquina');
     const historico    = paradasHoje.filter(r=>r.status==='parada'||r.status==='produzido');
 
-    // Detecta lacunas de tempo não registradas
+    // Detecta lacunas de tempo não registradas (inclui do último registro até agora)
     function detectaLacunas(recs){
       const lacunas=[];
-      const sorted=[...recs].filter(r=>r.hora_inicio&&r.hora_fim).sort((a,b)=>a.hora_inicio.localeCompare(b.hora_inicio));
-      for(let i=0;i<sorted.length-1;i++){
-        const fimAtual=sorted[i].hora_fim?.slice(0,5);
-        const inicioProx=sorted[i+1].hora_inicio?.slice(0,5);
+      // Inclui registros com hora_fim E registros abertos (sem hora_fim)
+      const todos=[...recs].filter(r=>r.hora_inicio).sort((a,b)=>a.hora_inicio.localeCompare(b.hora_inicio));
+      const comFim=todos.filter(r=>r.hora_fim);
+      // Lacunas entre registros
+      for(let i=0;i<comFim.length-1;i++){
+        const fimAtual=comFim[i].hora_fim?.slice(0,5);
+        const inicioProx=comFim[i+1].hora_inicio?.slice(0,5);
         if(fimAtual&&inicioProx&&inicioProx>fimAtual){
-          lacunas.push({de:fimAtual,ate:inicioProx});
+          // Verifica se não há registro aberto cobrindo esse período
+          const coberto=todos.some(r=>!r.hora_fim&&r.hora_inicio?.slice(0,5)<=fimAtual);
+          if(!coberto) lacunas.push({de:fimAtual,ate:inicioProx});
+        }
+      }
+      // Lacuna do último registro fechado até agora (se não há nada aberto)
+      const temAberto=todos.some(r=>!r.hora_fim);
+      if(!temAberto && comFim.length){
+        const ultimoFim=comFim[comFim.length-1].hora_fim?.slice(0,5);
+        const agora=new Date().toTimeString().slice(0,5);
+        // Só alerta se passaram mais de 5 minutos sem apontamento
+        if(ultimoFim&&agora>ultimoFim){
+          const [h1,m1]=ultimoFim.split(':').map(Number);
+          const [h2,m2]=agora.split(':').map(Number);
+          const diffMin=(h2*60+m2)-(h1*60+m1);
+          if(diffMin>5) lacunas.push({de:ultimoFim,ate:agora,atual:true});
         }
       }
       return lacunas;
     }
-    const lacunas=detectaLacunas(paradasHoje.filter(r=>r.hora_fim));
+    const lacunas=detectaLacunas(paradasHoje);
 
     c.innerHTML=`
       <!-- PRODUÇÕES EM ANDAMENTO -->
@@ -1010,20 +1107,22 @@ async function confirmarParadaOrdem(idOrdem){
   const hi   = document.getElementById('rp-hi-'+idOrdem)?.value;
   const mot  = document.getElementById('rp-mot-'+idOrdem)?.value;
   const obs  = document.getElementById('rp-obs-'+idOrdem)?.value.trim();
+  if(!hi){alert('Informe a hora de início da parada.');return}
   if(!mot){alert('Selecione o motivo de parada.');return}
 
   try{
     // 1. Fecha a ordem em produção com hora_fim = hora início da parada
     await apiPatch(`/api/apontamentos/${idOrdem}`, {
-      hora_fim: hi,
-      status: 'parada',
-      cod_parada: mot,
+      hora_fim:      hi,
+      status:        'parada',
+      cod_parada:    mot,
       motivo_parada: mot,
       classe_parada: PLANEJADAS.includes(mot)?'Planejada':'Não planejada',
-      observacao: obs||undefined
+      observacao:    obs||undefined
     });
 
-    // 2. Cria registro de parada da máquina
+    // 2. Cria registro de parada da máquina vinculado à ordem
+    //    retomada_de = idOrdem para que ao retornar, o /retornar endpoint saiba qual ordem reabrir
     await apiPost('/api/apontamentos', {
       data:          new Date().toISOString().split('T')[0],
       hora_inicio:   hi,
@@ -1047,13 +1146,23 @@ function abrirParadaMaquina(){
   extra.id = 'parada-maq-box';
   extra.className = 'card';
   extra.style.borderLeft = '4px solid var(--brand)';
+  const ens = ensaquesDisponiveis().map(e=>`<option value="${e}">${e}</option>`).join('');
   extra.innerHTML=`
     <div class="card-title">🔴 Registrar parada de máquina</div>
     <div class="grid2">
       <div class="field"><label>Hora início</label><input type="time" id="pm-hi" value="${nowHM()}"></div>
       <div class="field"><label>Motivo</label>${motivosSelect('pm-mot')}</div>
     </div>
-    <div class="field"><label>Observação (opcional)</label><input type="text" id="pm-obs" placeholder="Detalhes adicionais"></div>
+    <div class="grid2">
+      <div class="field">
+        <label>Escopo da parada</label>
+        <select id="pm-escopo" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:8px;font-size:13px;background:var(--surface);">
+          <option value="maquina_toda">Máquina toda</option>
+          ${ens}
+        </select>
+      </div>
+      <div class="field"><label>Observação (opcional)</label><input type="text" id="pm-obs" placeholder="Detalhes adicionais"></div>
+    </div>
     <div style="display:flex;gap:8px;margin-top:10px;">
       <button class="btn-primary" style="width:auto;background:var(--brand);padding:7px 16px;" onclick="confirmarParadaMaquina()">
         Confirmar parada
@@ -1067,9 +1176,10 @@ function abrirParadaMaquina(){
 }
 
 async function confirmarParadaMaquina(){
-  const hi  = document.getElementById('pm-hi')?.value;
-  const mot = document.getElementById('pm-mot')?.value;
-  const obs = document.getElementById('pm-obs')?.value.trim();
+  const hi     = document.getElementById('pm-hi')?.value;
+  const mot    = document.getElementById('pm-mot')?.value;
+  const obs    = document.getElementById('pm-obs')?.value.trim();
+  const escopo = document.getElementById('pm-escopo')?.value || 'maquina_toda';
   if(!mot){alert('Selecione o motivo de parada.');return}
   try{
     await apiPost('/api/apontamentos',{
@@ -1078,7 +1188,8 @@ async function confirmarParadaMaquina(){
       cod_parada:    mot,
       motivo_parada: mot,
       classe_parada: PLANEJADAS.includes(mot)?'Planejada':'Não planejada',
-      observacao:    obs||'',
+      ensaque:       escopo !== 'maquina_toda' ? escopo : null,
+      observacao:    (escopo!=='maquina_toda'?`[${escopo}] `:'')+(obs||''),
       status:        'em_producao',
       tipo_registro: 'parada_maquina',
     });
@@ -1106,13 +1217,12 @@ function abrirRetornoParada(id){
 }
 
 async function confirmarRetornoParada(id){
-  const hf = document.getElementById('ret-hf-'+id)?.value;
-  if(!hf){alert('Informe a hora de retorno.');return}
   try{
-    // Fecha a parada
-    await apiPatch(`/api/apontamentos/${id}`,{hora_fim:hf, status:'parada'});
+    // Usa o endpoint dedicado que fecha a parada E reabre a ordem
+    await api('POST', `/api/apontamentos/${id}/retornar`, {});
     renderAbertas(document.getElementById('abertas-wrap'));
-  }catch(e){alert('Erro: '+e.message)}
+    renderPreSeqFila && renderPreSeqFila(document.getElementById('preseq-wrap'));
+  }catch(e){alert('Erro ao retornar: '+e.message)}
 }
 
 /* Abre justificativa para lacuna de tempo */
@@ -1215,6 +1325,12 @@ async function retomarProducao(idOrigem){
 function abrirFechamento(id,tipo){
   const box=document.getElementById('closebox-'+id);
   if(tipo==='produzido'){
+    // Tenta buscar volume da ordem do SAP para pré-preencher
+    apiGet('/api/apontamentos/'+id).then(orig=>{
+      const volSAP = orig?.ord_proc_qtd || '';
+      const input = document.getElementById('cf-vol-'+id);
+      if(input && volSAP) input.value = volSAP;
+    }).catch(()=>{});
     box.innerHTML=`
       <div class="grid2" style="margin-top:10px;">
         <div class="field"><label>Hora fim</label><input type="time" id="cf-hf-${id}" value="${nowHM()}"></div>
@@ -1225,6 +1341,14 @@ function abrirFechamento(id,tipo){
         <div class="field"><label>Observação (opcional)</label><input type="text" id="cf-obs-${id}" placeholder="Observações finais"></div>
       </div>
       <button class="btn-primary" style="width:auto;" onclick="fecharOrdem('${id}','produzido')">Confirmar produzido</button>`;
+    // Após renderizar, busca volume do SAP
+    setTimeout(()=>{
+      apiGet('/api/sap').then(rows=>{
+        const apont = rows.find(r=>r._status_real==='em_producao');
+        const input = document.getElementById('cf-vol-'+id);
+        if(input && !input.value && apont?.ord_proc_qtd) input.value = apont.ord_proc_qtd;
+      }).catch(()=>{});
+    }, 200);
   } else {
     box.innerHTML=`
       <div class="grid2" style="margin-top:10px;">
