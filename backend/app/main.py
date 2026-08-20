@@ -464,7 +464,7 @@ async def get_oee(
 @app.get("/api/sap")
 async def get_sap(sess: dict = Depends(verificar_token)):
     http = app.state.http
-    sap_rows, prod_rows = await __import__("asyncio").gather(
+    sap_rows, prod_rows = await asyncio.gather(
         sb_get(http, "sequenciamento_sap", "?order=data_criacao.asc,hora_criacao.asc"),
         sb_get(http, "producao_apontamentos",
                "?status=in.(em_producao,produzido)&select=ordem_processo,status"),
