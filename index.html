@@ -1131,7 +1131,7 @@ async function renderAbertas(c){
             <div class="row-sub">${r.produto||'-'} · ${r.embalagem||'-'} · Placa ${r.placa||'-'} · ${r.ensaque||'-'}</div>
             <div id="closebox-${r.id}"></div>
             <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
-              <button class="btn-primary" style="width:auto;background:var(--green-text);box-shadow:none;padding:7px 16px;" onclick="abrirFechamento('${r.id}','produzido')">
+              <button class="btn-primary" style="width:auto;background:var(--green-text);box-shadow:none;padding:7px 16px;" onclick="abrirFechamento('${r.id}','produzido','${r.ordem_processo||''}')">
                 ✅ Finalizar produção
               </button>
               <button class="btn-primary" style="width:auto;background:var(--amber-text);box-shadow:none;padding:7px 16px;" onclick="abrirRegistroParada('${r.id}','producao')">
@@ -1440,20 +1440,45 @@ async function retomarProducao(idOrigem){
 }
 
 /* Abre os campos extras (hora fim + volume/rejeito OU cod. parada) antes de
-   confirmar o fechamento de uma ordem que esta em producao */
-function abrirFechamento(id,tipo){
+   confirmar o fechamento de uma ordem que esta em producao.
+   Quando tipo='produzido', busca o volume da ordem no SAP (ord_proc_qtd)
+   e pré-preenche o campo para evitar digitação manual. */
+async function abrirFechamento(id, tipo, ordemProcesso){
   const box=document.getElementById('closebox-'+id);
   if(tipo==='produzido'){
+    // Renderiza o formulário imediatamente com placeholder enquanto busca no SAP
     box.innerHTML=`
       <div class="grid2" style="margin-top:10px;">
         <div class="field"><label>Hora fim</label><input type="time" id="cf-hf-${id}" value="${nowHM()}"></div>
-        <div class="field"><label>Volume produzido (t)</label><input type="number" id="cf-vol-${id}" step="0.01" placeholder="0.00"></div>
+        <div class="field"><label>Volume produzido (t)</label><input type="number" id="cf-vol-${id}" step="0.01" placeholder="Buscando..."></div>
       </div>
       <div class="grid2">
         <div class="field"><label>Rejeito (t)</label><input type="number" id="cf-rej-${id}" step="0.001" placeholder="0.000" value="0"></div>
         <div class="field"><label>Observação (opcional)</label><input type="text" id="cf-obs-${id}" placeholder="Observações finais"></div>
       </div>
       <button class="btn-primary" style="width:auto;" onclick="fecharOrdem('${id}','produzido')">Confirmar produzido</button>`;
+
+    // Tenta puxar o volume da ordem no SAP
+    if(ordemProcesso){
+      try{
+        const sapRows = await apiGet(`/api/sap?ordem_processo=${encodeURIComponent(ordemProcesso)}`);
+        const sapRow  = sapRows && sapRows[0];
+        const volInput = document.getElementById('cf-vol-'+id);
+        if(volInput){
+          if(sapRow && sapRow.ord_proc_qtd != null){
+            volInput.value       = parseFloat(sapRow.ord_proc_qtd);
+            volInput.placeholder = '0.00';
+            volInput.title       = 'Pré-preenchido com a Qtd OP do SAP';
+            volInput.style.borderColor = 'var(--green-text)';
+          } else {
+            volInput.placeholder = '0.00';
+          }
+        }
+      }catch(_){
+        const volInput = document.getElementById('cf-vol-'+id);
+        if(volInput) volInput.placeholder = '0.00';
+      }
+    }
   } else {
     box.innerHTML=`
       <div class="grid2" style="margin-top:10px;">
