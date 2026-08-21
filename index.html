@@ -225,6 +225,7 @@ textarea{height:64px;resize:vertical}
 .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:6px}
 .spinner-dark{border-color:rgba(0,0,0,0.15);border-top-color:var(--brand)}
 @keyframes spin{to{transform:rotate(360deg)}}
+.icon-spin{display:inline-flex;animation:spin 2.2s linear infinite;vertical-align:middle}
 /* ============================================================
    RESPONSIVO (celular / tablet)
    ============================================================ */
@@ -283,6 +284,13 @@ textarea{height:64px;resize:vertical}
   100%{transform:scale(1.12) translate(-1.5%,-1.5%)}
 }
 .login-box{position:relative;z-index:1}
+/* ============================================================
+   MODAL (caixinha sobreposta usada em confirmações, ex: pré-seq)
+   ============================================================ */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:300;
+  display:flex;align-items:center;justify-content:center;padding:20px;
+}
 </style>
 </head>
 <body>
@@ -366,16 +374,18 @@ function fmtDate(d){if(!d)return'—';const p=d.split('-');return p.length===3?`
 function initials(n){return n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}
 function setLoading(c,msg='Carregando...'){c.innerHTML=`<div class="empty"><span class="spinner spinner-dark"></span>${msg}</div>`}
 function statusBadge(r){
-  if(r.status==='parada') return `<span class="badge b-parada">Parada${r.cod_parada?': '+r.cod_parada:''}</span>`;
-  if(r.status==='produzido') return `<span class="badge b-ok">Produzido</span>`;
-  return `<span class="badge b-normal">Em produção</span>`;
+  if(r.status==='parada') return `<span class="badge b-parada" style="display:inline-flex;align-items:center;gap:4px;">${icons.warn} Parada${r.cod_parada?': '+r.cod_parada:''}</span>`;
+  if(r.status==='produzido') return `<span class="badge b-ok">✅ Produzido</span>`;
+  return `<span class="badge b-normal" style="display:inline-flex;align-items:center;gap:4px;">${icons.gear} Em produção</span>`;
 }
 
 const icons={
   logout:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
   err:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
   info:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
-  dl:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`
+  dl:`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+  gear:`<svg class="icon-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+  warn:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`
 };
 
 /* ----------------------------------------------------------------
@@ -475,7 +485,7 @@ function doLogout(){session=null;_jwtToken=null;saveSession(null);renderLogin()}
    ================================================================ */
 function renderApp(){
   const tabs=[
-    {k:'form',      l:'Registrar sequenciamento',   icon:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>'},
+    {k:'form',      l:'Registrar apontamento',   icon:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>'},
     {k:'sap',       l:'Emissões SAP',                icon:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'},
     {k:'hoje',      l:'Sequenciamentos de hoje',      icon:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'},
     {k:'dashboard', l:'Dashboard',                    icon:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>'},
@@ -520,20 +530,32 @@ function renderApp(){
           <span class="mobile-topbar-title">Controle de Produção dos Maquinários</span>
         </div>
         <div class="content-wrap"><div id="tab-content"></div></div>
-        <div style="text-align:center;padding:18px 0 28px;font-size:14.5px;color:var(--text3);border-top:1px solid var(--border);margin-top:12px;">
+        <div style="text-align:center;padding:18px 0 28px;font-size:14.5px;color:var(--text3);border-top:1px solid var(--border);margin-top:12px;" id="app-footer">
           Controle de Produção Heringer © ${new Date().getFullYear()} — Todos os direitos reservados.
         </div>
       </div>
     </div>
     <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>`;
+  aplicarPreferenciaSidebar();
   renderTab('form');
 }
 
 /* Recolhe/expande a sidebar (desktop: vira so icones; mobile: esconde/mostra) */
 function toggleSidebar(){
-  document.getElementById('sidebar').classList.toggle('collapsed');
-  document.getElementById('sidebar').classList.toggle('mobile-open');
+  const el = document.getElementById('sidebar');
+  el.classList.toggle('collapsed');
+  el.classList.toggle('mobile-open');
   document.getElementById('sidebar-overlay').classList.toggle('visible');
+  // Só salva a preferência de recolher/expandir para telas de desktop (no mobile é so abrir/fechar)
+  if(window.innerWidth > 900){
+    localStorage.setItem('sidebar_collapsed', el.classList.contains('collapsed') ? '1' : '0');
+  }
+}
+/* Aplica a preferência salva de sidebar recolhida (chamado logo após montar a tela) */
+function aplicarPreferenciaSidebar(){
+  if(window.innerWidth > 900 && localStorage.getItem('sidebar_collapsed')==='1'){
+    document.getElementById('sidebar')?.classList.add('collapsed');
+  }
 }
 
 /* Troca de módulo (Registrar / SAP / Hoje / Dashboard / OEE / Relatorio) */
@@ -549,6 +571,21 @@ function switchTab(k,el){
 }
 function renderTab(k){
   const c=document.getElementById('tab-content');
+  const darkTabs=['dashboard','oee'];
+  const wrap=document.querySelector('.content-wrap');
+  if(wrap){
+    if(darkTabs.includes(k)){
+      wrap.style.padding='0';
+      wrap.style.background='#0d0d1a';
+      wrap.style.minHeight='100vh';
+    } else {
+      wrap.style.padding='';
+      wrap.style.background='';
+      wrap.style.minHeight='';
+    }
+  }
+  const footer=document.getElementById('app-footer');
+  if(footer) footer.style.display=darkTabs.includes(k)?'none':'';
   if(k==='form') renderForm(c);
   else if(k==='sap') renderSAP(c);
   else if(k==='hoje') renderHoje(c);
@@ -633,7 +670,7 @@ function renderSAPLista(c, rows, filtro){
           <strong>OP: ${r.ordem_processo||'-'}</strong>
           ${badges[r._status_real]||''}
           ${r._status_real==='aguardando'?`
-            <button onclick="togglePreSeq('${r.id}',${!r.pre_sequenciamento})"
+            <button onclick="abrirModalPreSeq('${r.id}')"
               style="margin-left:auto;padding:4px 12px;border-radius:7px;border:1px solid var(--purple-text);background:var(--purple-bg);color:var(--purple-text);font-size:11px;font-weight:600;cursor:pointer;">
               + Pré-sequenciar
             </button>`:''}
@@ -659,9 +696,59 @@ function renderSAPLista(c, rows, filtro){
 
 async function togglePreSeq(id, valor){
   try{
-    await apiPatch(`/api/sap/${id}/pre-seq?valor=${valor}`, {});
+    await apiPatch(`/api/sap/${id}/pre-seq`, { valor });
     renderSAP(document.getElementById('tab-content'));
   }catch(e){ alert('Erro ao atualizar: '+e.message); }
+}
+
+/* Abre a caixinha pedindo ensaque + máquina de destino antes de marcar como pré-sequenciado */
+function abrirModalPreSeq(id){
+  const maquinasOpts = MAQUINAS.map(m=>`<option value="${m.id}">${m.nome}</option>`).join('');
+  const html = `
+    <div class="modal-overlay" id="modal-preseq-overlay" onclick="if(event.target===this) fecharModalPreSeq()">
+      <div class="card" style="max-width:380px;width:92%;">
+        <div class="card-title">Pré-sequenciar ordem</div>
+        <div class="field"><label>Ensaque de destino</label>
+          <select id="preseq-ensaque">
+            <option value="Ensaque 1">Ensaque 1</option>
+            <option value="Ensaque 2">Ensaque 2</option>
+          </select>
+        </div>
+        <div class="field"><label>Máquina de destino</label>
+          <select id="preseq-maquina">${maquinasOpts}</select>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:14px;">
+          <button class="btn-sm" style="flex:1;" onclick="fecharModalPreSeq()">Cancelar</button>
+          <button class="btn-primary" style="flex:1;" onclick="confirmarPreSeq('${id}')">Confirmar</button>
+        </div>
+        <div id="preseq-msg"></div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+function fecharModalPreSeq(){
+  document.getElementById('modal-preseq-overlay')?.remove();
+}
+async function confirmarPreSeq(id){
+  const ensaque = document.getElementById('preseq-ensaque').value;
+  const maquinaId = document.getElementById('preseq-maquina').value;
+  const maquinaNome = document.getElementById('preseq-maquina').selectedOptions[0]?.textContent;
+  if(!ensaque || !maquinaId){
+    document.getElementById('preseq-msg').innerHTML = `<div class="alert alert-err">${icons.err}<span>Selecione o ensaque e a máquina.</span></div>`;
+    return;
+  }
+  try{
+    await apiPatch(`/api/sap/${id}/pre-seq`, {
+      valor: true,
+      ensaque_destino: ensaque,
+      maquina_destino_id: maquinaId,
+      maquina_destino_nome: maquinaNome,
+    });
+    fecharModalPreSeq();
+    renderSAP(document.getElementById('tab-content'));
+  }catch(e){
+    document.getElementById('preseq-msg').innerHTML = `<div class="alert alert-err">${icons.err}<span>Erro: ${e.message}</span></div>`;
+  }
 }
 async function importarSAP(input){
   const file = input.files[0];
@@ -762,7 +849,8 @@ async function renderPreSeqFila(wrap){
   if(!wrap) return;
   try{
     const rows = await apiGet('/api/sap');
-    const preSeq = rows.filter(r=>r._status_real==='pre_seq');
+    // Só mostra ordens pré-sequenciadas especificamente para a máquina em que este operador está logado
+    const preSeq = rows.filter(r=>r._status_real==='pre_seq' && String(r.maquina_destino_id)===String(session.maquina_id));
     if(!preSeq.length){ wrap.innerHTML=''; return; }
     wrap.innerHTML=`
       <div class="card" style="border-left:4px solid var(--brand);">
@@ -786,15 +874,13 @@ async function renderPreSeqFila(wrap){
             <div class="row-sub">
               Cliente: ${r.cliente||'-'} · OV: ${r.ordem_venda||'-'} · Placa: ${r.placa_caminhao||'-'}
             </div>
-            <div style="margin-top:8px;display:flex;gap:8px;align-items:center;">
+            <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
               <input type="text" id="placa-preseq-${r.id}" placeholder="Placa do caminhão" 
                 value="${r.placa_caminhao||''}"
                 style="width:160px;padding:6px 10px;border:1px solid var(--border2);border-radius:6px;font-size:13px;"
                 oninput="this.value=this.value.toUpperCase()">
-              <select id="ensaque-preseq-${r.id}" style="padding:6px 10px;border:1px solid var(--border2);border-radius:6px;font-size:13px;">
-                <option value="Ensaque 1">Ensaque 1</option>
-                <option value="Ensaque 2">Ensaque 2</option>
-              </select>
+              <span class="badge b-normal">Ensaque destino: ${r.ensaque_destino||'-'}</span>
+              <input type="hidden" id="ensaque-preseq-${r.id}" value="${r.ensaque_destino||'Ensaque 1'}">
               <button onclick="iniciarPreSeq('${r.id}','${r.ordem_processo}','${r.descricao_material}','${r.tipo_embalagem}')"
                 style="padding:7px 18px;background:var(--brand);color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;">
                 ▶ Iniciar produção
@@ -835,7 +921,7 @@ async function iniciarPreSeq(sapId, ordemProcesso, produto, tipoEmbalagem){
   try{
     await apiPost('/api/apontamentos', payload);
     // Remove da fila de pre-seq no SAP
-    await apiPatch(`/api/sap/${sapId}/pre-seq?valor=false`, {});
+    await apiPatch(`/api/sap/${sapId}/pre-seq`, { valor: false });
     // Recarrega a aba
     renderForm(document.getElementById('tab-content'));
     document.getElementById('save-msg') && (document.getElementById('save-msg').innerHTML=
@@ -982,26 +1068,56 @@ async function renderAbertas(c){
     const paradasAtivas= abertas.filter(r=>r.tipo_registro==='parada_geral'||r.tipo_registro==='parada_maquina');
     const historico    = paradasHoje.filter(r=>r.status==='parada'||r.status==='produzido');
 
-    // Detecta lacunas de tempo não registradas
-    function detectaLacunas(recs){
-      const lacunas=[];
-      const sorted=[...recs].filter(r=>r.hora_inicio&&r.hora_fim).sort((a,b)=>a.hora_inicio.localeCompare(b.hora_inicio));
-      for(let i=0;i<sorted.length-1;i++){
-        const fimAtual=sorted[i].hora_fim?.slice(0,5);
-        const inicioProx=sorted[i+1].hora_inicio?.slice(0,5);
-        if(fimAtual&&inicioProx&&inicioProx>fimAtual){
-          lacunas.push({de:fimAtual,ate:inicioProx});
-        }
-      }
-      return lacunas;
+    // Detecta lacunas de tempo não registradas, separadas por ensaque (Ensaque 1 / Ensaque 2).
+    // Paradas gerais e de máquina (sem ensaque específico) valem para os dois lados.
+    // Também considera o período desde o INÍCIO DO TURNO até o primeiro apontamento do dia.
+    const turnoInicioMap = {'1':'07:00','2':'15:30','3':'23:30'};
+    const turnoInicio = turnoInicioMap[session.turno] || '00:00';
+    const agora = nowHM();
+
+    function detectaLacunasPorEnsaque(recs){
+      const lacunasPorLado = {};
+      ['Ensaque 1','Ensaque 2'].forEach(lado=>{
+        const doLado = recs.filter(r=>r.ensaque===lado || !r.ensaque);
+        const sorted = [...doLado].sort((a,b)=>a.hora_inicio.localeCompare(b.hora_inicio));
+        const lac=[];
+        let cursor = turnoInicio;
+        sorted.forEach(r=>{
+          const hi=r.hora_inicio.slice(0,5), hf=r.hora_fim.slice(0,5);
+          if(hi>cursor) lac.push({de:cursor, ate:hi});
+          if(hf>cursor) cursor=hf;
+        });
+        if(agora>cursor) lac.push({de:cursor, ate:agora});
+        lacunasPorLado[lado]=lac;
+      });
+      return lacunasPorLado;
     }
-    const lacunas=detectaLacunas(paradasHoje.filter(r=>r.hora_fim));
+        // Inclui registros fechados + ordens em_producao abertas (usando agora como hora_fim temporária)
+    const recsParaLacuna = [
+      ...paradasHoje.filter(r=>r.hora_inicio&&r.hora_fim),
+      ...emProducao.map(r=>({...r, hora_fim: agora+':00'}))
+    ];
+    const lacunasPorLado = detectaLacunasPorEnsaque(recsParaLacuna);
+
+    // Junta lacunas com o mesmo horário nos dois ensaques numa única lacuna "dos dois lados"
+    const lacunasCombinadas = [];
+    const usadosE2 = new Set();
+    (lacunasPorLado['Ensaque 1']||[]).forEach(l1=>{
+      const idxE2 = (lacunasPorLado['Ensaque 2']||[]).findIndex((l2,i)=>!usadosE2.has(i)&&l2.de===l1.de&&l2.ate===l1.ate);
+      if(idxE2>=0){ usadosE2.add(idxE2); lacunasCombinadas.push({de:l1.de,ate:l1.ate,lados:['Ensaque 1','Ensaque 2']}); }
+      else lacunasCombinadas.push({de:l1.de,ate:l1.ate,lados:['Ensaque 1']});
+    });
+    (lacunasPorLado['Ensaque 2']||[]).forEach((l2,i)=>{
+      if(!usadosE2.has(i)) lacunasCombinadas.push({de:l2.de,ate:l2.ate,lados:['Ensaque 2']});
+    });
+    lacunasCombinadas.sort((a,b)=>a.de.localeCompare(b.de));
+    const lacunas = lacunasCombinadas;
 
     c.innerHTML=`
       <!-- PRODUÇÕES EM ANDAMENTO -->
       <div class="card" style="border-left:4px solid var(--green-text);">
         <div class="card-title">
-          🟢 Ordens em produção
+          <span style="color:var(--green-text);display:inline-flex;">${icons.gear}</span> Ordens em produção
           <span class="badge b-ok" style="margin-left:8px;">${emProducao.length}</span>
         </div>
         ${!emProducao.length?`<div class="empty">Nenhuma ordem em produção. Registre uma ordem ou abra uma parada de máquina.</div>`:
@@ -1009,7 +1125,7 @@ async function renderAbertas(c){
           <div class="row" id="row-${r.id}" style="border-left:3px solid var(--green-text);padding-left:10px;">
             <div class="row-head">
               <strong>${r.ordem_processo||'-'}</strong>
-              <span class="badge b-ok">Em produção</span>
+              <span class="badge b-ok" style="display:inline-flex;align-items:center;gap:4px;">${icons.gear} Em produção</span>
               <span style="font-size:11px;color:var(--text3);">desde ${(r.hora_inicio||'').slice(0,5)}</span>
             </div>
             <div class="row-sub">${r.produto||'-'} · ${r.embalagem||'-'} · Placa ${r.placa||'-'} · ${r.ensaque||'-'}</div>
@@ -1027,15 +1143,15 @@ async function renderAbertas(c){
 
       <!-- PARADAS ATIVAS DA MÁQUINA -->
       ${paradasAtivas.length?`
-      <div class="card" style="border-left:4px solid var(--brand);">
+      <div class="card" style="border-left:4px solid #f59e0b;">
         <div class="card-title">
-          🔴 Máquina parada
+          <span style="color:#f59e0b;display:inline-flex;">${icons.warn}</span> Máquina parada
           <span class="badge b-parada" style="margin-left:8px;">${paradasAtivas.length} parada(s) ativa(s)</span>
         </div>
         ${paradasAtivas.map(r=>`
-          <div class="row" id="row-${r.id}" style="border-left:3px solid var(--brand);padding-left:10px;">
+          <div class="row" id="row-${r.id}" style="border-left:3px solid #f59e0b;padding-left:10px;">
             <div class="row-head">
-              <span class="badge b-parada">${r.cod_parada||r.motivo_parada||'Sem motivo'}</span>
+              <span class="badge b-parada" style="display:inline-flex;align-items:center;gap:4px;">${icons.warn} ${r.cod_parada||r.motivo_parada||'Sem motivo'}</span>
               <span class="badge" style="background:${PLANEJADAS.includes(r.cod_parada)?'var(--surface2)':'#fef3c7'};color:${PLANEJADAS.includes(r.cod_parada)?'var(--text3)':'#92400e'};font-size:10px;">
                 ${PLANEJADAS.includes(r.cod_parada)?'Planejada':'Não planejada'}
               </span>
@@ -1065,34 +1181,15 @@ async function renderAbertas(c){
       <div class="card" style="border-left:4px solid #f59e0b;background:#fffbeb;">
         <div class="card-title" style="color:#92400e;">⚠️ Lacunas de tempo não registradas (${lacunas.length})</div>
         ${lacunas.map(l=>`
-          <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #fde68a;">
-            <span style="font-size:13px;color:#92400e;">⏱ ${l.de} → ${l.ate} sem apontamento</span>
-            <button onclick="abrirJustificativaLacuna('${l.de}','${l.ate}')"
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #fde68a;flex-wrap:wrap;">
+            <span style="font-size:13px;color:#92400e;">⏱ ${l.de} → ${l.ate} sem apontamento — <strong>${l.lados.join(' e ')}</strong></span>
+            <button onclick="abrirJustificativaLacuna('${l.de}','${l.ate}','${l.lados.join(',')}')"
               style="padding:4px 12px;background:#f59e0b;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;">
               Justificar
             </button>
           </div>`).join('')}
       </div>`:''}
 
-      <!-- HISTÓRICO DO DIA -->
-      ${historico.length?`
-      <div class="card">
-        <div class="card-title">📋 Histórico de hoje — ${historico.length} registro(s)</div>
-        ${historico.map(r=>`
-          <div class="row" style="border-left:3px solid ${r.status==='produzido'?'var(--green-text)':'var(--brand)'};padding-left:10px;">
-            <div class="row-head">
-              <strong>${r.ordem_processo||r.cod_parada||'-'}</strong>
-              ${r.status==='produzido'?'<span class="badge b-ok">Produzido</span>':'<span class="badge b-parada">Parada</span>'}
-              <span style="font-size:11px;color:var(--text3);">${(r.hora_inicio||'').slice(0,5)} → ${(r.hora_fim||'').slice(0,5)}</span>
-            </div>
-            <div class="row-sub">
-              ${r.produto?r.produto+' · ':''}
-              ${r.volume_produzido?'Vol: '+r.volume_produzido+'t · ':''}
-              ${r.cod_parada?'Motivo: '+r.cod_parada:''}
-              ${r.classe_parada?'· '+r.classe_parada:''}
-            </div>
-          </div>`).join('')}
-      </div>`:''}
     `;
   }catch(e){c.innerHTML=`<div class="alert alert-err">${icons.err}<span>Erro: ${e.message}</span></div>`}
 }
@@ -1231,14 +1328,24 @@ async function confirmarRetornoParada(id){
 }
 
 /* Abre justificativa para lacuna de tempo */
-function abrirJustificativaLacuna(de, ate){
+function abrirJustificativaLacuna(de, ate, ladosStr){
+  const lados = ladosStr.split(',');
   const wrap = document.getElementById('abertas-wrap');
   const extra = document.createElement('div');
   extra.id = 'lacuna-box';
   extra.className = 'card';
   extra.style.borderLeft = '4px solid #f59e0b';
+  const checkboxes = lados.length>1 ? `
+    <div class="field"><label>Justificar para</label>
+      <div style="display:flex;gap:16px;margin-top:4px;">
+        ${lados.map(l=>`<label style="font-size:13px;display:flex;align-items:center;gap:5px;font-weight:400;text-transform:none;">
+          <input type="checkbox" class="lac-lado-chk" value="${l}" checked> ${l}
+        </label>`).join('')}
+      </div>
+    </div>` : `<input type="hidden" class="lac-lado-chk" value="${lados[0]}" checked>`;
   extra.innerHTML=`
     <div class="card-title" style="color:#92400e;">⚠️ Justificar lacuna ${de} → ${ate}</div>
+    ${checkboxes}
     <div class="field"><label>Motivo</label>${motivosSelect('lac-mot')}</div>
     <div class="field"><label>Observação</label><input type="text" id="lac-obs" placeholder="O que aconteceu nesse período?"></div>
     <div style="display:flex;gap:8px;margin-top:10px;">
@@ -1256,7 +1363,11 @@ function abrirJustificativaLacuna(de, ate){
 async function confirmarLacuna(hi, hf, btnEl){
   const mot = document.getElementById('lac-mot')?.value;
   const obs = document.getElementById('lac-obs')?.value.trim();
+  const ladosSelecionados = Array.from(document.querySelectorAll('.lac-lado-chk'))
+    .filter(el=>el.type!=='checkbox' || el.checked)
+    .map(el=>el.value);
   if(!mot){alert('Selecione o motivo.');return}
+  if(!ladosSelecionados.length){alert('Selecione ao menos um ensaque para justificar.');return}
 
   // Trava o botão imediatamente para não deixar clicar duas vezes
   if(btnEl){ btnEl.disabled = true; btnEl.textContent = 'Salvando...'; }
@@ -1264,26 +1375,29 @@ async function confirmarLacuna(hi, hf, btnEl){
   try{
     const hoje = new Date().toISOString().split('T')[0];
 
-    // Confere se essa lacuna já foi justificada antes (evita duplicar)
+    // Confere quais lados já foram justificados antes (evita duplicar)
     const existentes = await apiGet(
       `/api/apontamentos?maquina_id=${session.maquina_id}&data=${hoje}&tipo_registro=parada_maquina`
     );
-    const jaJustificada = existentes.some(r =>
-      (r.hora_inicio||'').slice(0,5) === hi && (r.hora_fim||'').slice(0,5) === hf
-    );
 
-    if(!jaJustificada){
-      await apiPost('/api/apontamentos',{
-        data:          hoje,
-        hora_inicio:   hi,
-        hora_fim:      hf,
-        cod_parada:    mot,
-        motivo_parada: mot,
-        classe_parada: PLANEJADAS.includes(mot)?'Planejada':'Não planejada',
-        observacao:    obs||'',
-        status:        'parada',
-        tipo_registro: 'parada_maquina',
-      });
+    for(const lado of ladosSelecionados){
+      const jaJustificada = existentes.some(r =>
+        (r.hora_inicio||'').slice(0,5) === hi && (r.hora_fim||'').slice(0,5) === hf && r.ensaque === lado
+      );
+      if(!jaJustificada){
+        await apiPost('/api/apontamentos',{
+          data:          hoje,
+          hora_inicio:   hi,
+          hora_fim:      hf,
+          ensaque:       lado,
+          cod_parada:    mot,
+          motivo_parada: mot,
+          classe_parada: PLANEJADAS.includes(mot)?'Planejada':'Não planejada',
+          observacao:    obs||'',
+          status:        'parada',
+          tipo_registro: 'parada_maquina',
+        });
+      }
     }
 
     document.getElementById('lacuna-box')?.remove();
@@ -1477,34 +1591,298 @@ async function renderHoje(c){
    Numeros gerais do dia (todas as maquinas): volume produzido,
    quantas ordens em producao agora, quantas paradas, etc.
    ================================================================ */
-async function renderDashboard(c){
+async function renderDashboard(c, filtroMaquinaId, filtroData){
   setLoading(c,'Carregando dashboard...');
   try{
-    const hoje=new Date().toISOString().split('T')[0];
-    const rows=await apiGet(`/api/apontamentos?data=${hoje}&order=hora_inicio.desc`);
-    const totalVolume=rows.reduce((s,r)=>s+(parseFloat(r.volume_produzido)||0),0);
-    const emProducao=rows.filter(r=>r.status==='em_producao').length;
-    const paradas=rows.filter(r=>r.status==='parada').length;
-    const ordens=new Set(rows.map(r=>r.ordem_processo)).size;
+    const hoje = new Date().toISOString().split('T')[0];
+    const dataAlvo = filtroData || hoje;
+    const maquinaAlvo = session.master ? (filtroMaquinaId||'') : session.maquina_id;
+    const params = maquinaAlvo
+      ? `/api/apontamentos?data=${dataAlvo}&maquina_id=${maquinaAlvo}&order=hora_inicio.asc`
+      : `/api/apontamentos?data=${dataAlvo}&order=hora_inicio.asc`;
+    const rows = await apiGet(params);
+
+    const PADRAO_TH = 18.8;
+    const PLANEJADAS_DASH = ['Sobreposição Turno','Limpeza Semanal','Linha Não Programada para Operar',
+      'Manutenção Preventiva','Parada de Manutenção Anual','Refeição','DDS','Reuniões e Treinamentos'];
+
+    function calcDurH(hi,hf){
+      if(!hi||!hf) return 0;
+      const [hh,mm]=hi.split(':').map(Number),[eh,em]=hf.split(':').map(Number);
+      let d=(eh*60+em)-(hh*60+mm); if(d<0)d+=1440; return d/60;
+    }
+
+    // Métricas gerais
+    const prodRows  = rows.filter(r=>r.status==='produzido'&&r.tipo_registro==='producao'&&r.hora_fim);
+    const paradRows = rows.filter(r=>r.status==='parada'&&r.hora_fim);
+    const emProd    = rows.filter(r=>r.status==='em_producao').length;
+    const volTotal  = prodRows.reduce((s,r)=>s+(parseFloat(r.volume_produzido)||0),0);
+    const volRejeito= rows.reduce((s,r)=>s+(r.rejeito_ton||0),0);
+    const hProd     = prodRows.reduce((s,r)=>s+calcDurH(r.hora_inicio,r.hora_fim),0);
+    const hParada   = paradRows.reduce((s,r)=>s+calcDurH(r.hora_inicio,r.hora_fim),0);
+    const hTurno    = 8.6; // referência padrão
+    const volMeta   = hTurno * PADRAO_TH;
+
+    // OEE global
+    const disp = hTurno>0 ? Math.min(hProd/hTurno*100,100) : 0;
+    const perf = hProd>0  ? Math.min(volTotal/(hProd*PADRAO_TH)*100,100) : 0;
+    const qual = volTotal>0 ? (volTotal-volRejeito)/volTotal*100 : 100;
+    const oee  = disp*perf*qual/10000;
+    const oeeColor = oee>=85?'#22c55e':oee>=65?'#f59e0b':'#ef4444';
+    const oeeLabel = oee>=85?'Excelente':oee>=65?'Aceitável':'Crítico';
+
+    // Gauge semicircular SVG
+    function semiGauge(val, color, label){
+      const R=54, cx=70, cy=70;
+      const startA=-180, endA=0;
+      const toRad=a=>a*Math.PI/180;
+      const pct=Math.min(val/100,1);
+      const angle=-180+pct*180;
+      const x=cx+R*Math.cos(toRad(angle)), y=cy+R*Math.sin(toRad(angle));
+      const bg_x2=cx+R*Math.cos(toRad(0)), bg_y2=cy+R*Math.sin(toRad(0));
+      return `<svg width="140" height="80" viewBox="0 0 140 80">
+        <path d="M${cx-R},${cy} A${R},${R} 0 0,1 ${bg_x2},${bg_y2}" fill="none" stroke="#2a2a3a" stroke-width="10" stroke-linecap="round"/>
+        <path d="M${cx-R},${cy} A${R},${R} 0 0,1 ${x},${y}" fill="none" stroke="${color}" stroke-width="10" stroke-linecap="round"/>
+        <text x="70" y="62" text-anchor="middle" font-size="18" font-weight="800" fill="${color}">${val.toFixed(1)}%</text>
+        <text x="70" y="75" text-anchor="middle" font-size="9" fill="#888">${label}</text>
+      </svg>`;
+    }
+
+    // Mini gauge circular
+    function miniGauge(val, color, label, sub){
+      const r=28, circ=2*Math.PI*r, offset=circ*(1-Math.min(val/100,1));
+      return `<div style="text-align:center;">
+        <svg width="72" height="72" viewBox="0 0 72 72">
+          <circle cx="36" cy="36" r="${r}" fill="none" stroke="#2a2a3a" stroke-width="8"/>
+          <circle cx="36" cy="36" r="${r}" fill="none" stroke="${color}" stroke-width="8"
+            stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}"
+            stroke-linecap="round" transform="rotate(-90 36 36)"/>
+          <text x="36" y="40" text-anchor="middle" font-size="11" font-weight="800" fill="${color}">${val.toFixed(1)}%</text>
+        </svg>
+        <div style="font-size:11px;font-weight:600;color:#ccc;margin-top:2px;">${label}</div>
+        <div style="font-size:10px;color:#666;">${sub}</div>
+      </div>`;
+    }
+
+    // Tendência por hora (sparkline)
+    function sparkline(recs){
+      const horas = Array.from({length:24},(_,i)=>i);
+      const data = horas.map(h=>{
+        const hr = recs.filter(r=>r.hora_inicio&&parseInt(r.hora_inicio)===h&&r.status==='produzido');
+        return hr.reduce((s,r)=>s+(r.volume_produzido||0),0);
+      });
+      const max = Math.max(...data,0.1);
+      const pts = data.map((v,i)=>`${(i/23*380).toFixed(1)},${(60-v/max*55).toFixed(1)}`).join(' ');
+      const filled = data.map((v,i)=>`${(i/23*380).toFixed(1)},${(60-v/max*55).toFixed(1)}`).join(' ') + ` 380,60 0,60`;
+      return `<svg width="100%" viewBox="0 0 380 65" preserveAspectRatio="none" style="display:block;">
+        <defs><linearGradient id="sg" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#3b82f6" stop-opacity="0.3"/><stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/></linearGradient></defs>
+        <polygon points="${filled}" fill="url(#sg)"/>
+        <polyline points="${pts}" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round"/>
+        <line x1="0" y1="${(60-85/100*55).toFixed(1)}" x2="380" y2="${(60-85/100*55).toFixed(1)}" stroke="#22c55e" stroke-width="1" stroke-dasharray="4,4" opacity="0.5"/>
+      </svg>`;
+    }
+
+    // Pareto de paradas
+    const paradaMap={};
+    paradRows.forEach(r=>{
+      const m=r.cod_parada||'Sem motivo';
+      paradaMap[m]=(paradaMap[m]||0)+calcDurH(r.hora_inicio,r.hora_fim);
+    });
+    const topParadas=Object.entries(paradaMap).sort((a,b)=>b[1]-a[1]).slice(0,6);
+    const totalParadaH=topParadas.reduce((s,[,h])=>s+h,0);
+
+    // Turnos
+    const turnos={};
+    rows.forEach(r=>{
+      const t=r.turno||'Sem turno';
+      if(!turnos[t]) turnos[t]={nome:t,prod:[],parada:[]};
+      if(r.status==='produzido'&&r.tipo_registro==='producao'&&r.hora_fim) turnos[t].prod.push(r);
+      if(r.status==='parada'&&r.hora_fim) turnos[t].parada.push(r);
+    });
+
+    // Filtros
+    const filtroHtml = session.master ? `
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
+        <select onchange="renderDashboard(document.getElementById('tab-content'),this.value,document.getElementById('dash-data')?.value)"
+          style="padding:6px 12px;background:#1a1a2e;border:1px solid #333;border-radius:7px;color:#ccc;font-size:12px;">
+          <option value="">Todas as máquinas</option>
+          ${MAQUINAS.map(m=>`<option value="${m.id}" ${String(maquinaAlvo)===String(m.id)?'selected':''}>${m.nome}</option>`).join('')}
+        </select>
+        <input type="date" id="dash-data" value="${dataAlvo}"
+          onchange="renderDashboard(document.getElementById('tab-content'),document.querySelector('[onchange*=renderDashboard] option:checked')?.value||'',this.value)"
+          style="padding:6px 10px;background:#1a1a2e;border:1px solid #333;border-radius:7px;color:#ccc;font-size:12px;">
+        <button onclick="renderDashboard(document.getElementById('tab-content'),'','${hoje}')"
+          style="padding:6px 12px;background:#CA2535;color:#fff;border:none;border-radius:7px;font-size:12px;cursor:pointer;">Hoje</button>
+      </div>` : `<div style="margin-bottom:12px;font-size:12px;color:#888;">📅 ${dataAlvo===hoje?'Hoje':'Data: '+dataAlvo} · ${session.maquina_nome}</div>`;
+
     c.innerHTML=`
-      <div class="grid4">
-        <div class="mcard mcard-brand"><div class="lbl">Volume produzido hoje</div><div class="val">${fmtNum(totalVolume)}</div><div class="trend">todas as máquinas</div></div>
-        <div class="mcard"><div class="lbl">Em produção agora</div><div class="val">${emProducao}</div><div class="trend">ordens abertas</div></div>
-        <div class="mcard"><div class="lbl">Ordens distintas</div><div class="val">${ordens}</div><div class="trend">no dia</div></div>
-        <div class="mcard"><div class="lbl" style="color:var(--amber-text);">Paradas registradas</div><div class="val" style="color:var(--amber-text);">${paradas}</div><div class="trend">hoje</div></div>
+    <style>
+      .dash-dark{background:#0d0d1a;min-height:100vh;padding:20px 24px;color:#e0e0e0;box-sizing:border-box;}
+      .dash-card{background:#12122a;border:1px solid #1e1e3a;border-radius:12px;padding:16px;}
+      .dash-grid{display:grid;gap:12px;}
+      .dash-grid-4{grid-template-columns:repeat(4,1fr);}
+      .dash-grid-2{grid-template-columns:1fr 1fr;}
+      .dash-grid-3{grid-template-columns:1fr 1fr 1fr;}
+      .dash-metric{font-size:28px;font-weight:800;line-height:1;}
+      .dash-label{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;}
+      .dash-sub{font-size:11px;color:#666;margin-top:4px;}
+      @media(max-width:700px){.dash-grid-4{grid-template-columns:repeat(2,1fr)}.dash-grid-2,.dash-grid-3{grid-template-columns:1fr}}
+    </style>
+    <div class="dash-dark" id="dash-container">
+      ${filtroHtml}
+
+      <!-- LINHA 1: OEE Global + 3 componentes -->
+      <div class="dash-grid dash-grid-2" style="margin-bottom:12px;">
+        <div class="dash-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;">
+          <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">⚡ OEE Global · ${dataAlvo===hoje?'Hoje':dataAlvo}</div>
+          ${semiGauge(oee, oeeColor, oeeLabel)}
+          <div style="width:100%;margin-top:12px;">
+            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px;"><span style="color:#888;">Disponibilidade</span><span style="color:#3b82f6;font-weight:700;">${disp.toFixed(1)}%</span></div>
+            <div style="height:5px;background:#1e1e3a;border-radius:3px;margin-bottom:8px;"><div style="width:${disp.toFixed(1)}%;height:100%;background:#3b82f6;border-radius:3px;"></div></div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px;"><span style="color:#888;">Performance</span><span style="color:#a855f7;font-weight:700;">${perf.toFixed(1)}%</span></div>
+            <div style="height:5px;background:#1e1e3a;border-radius:3px;margin-bottom:8px;"><div style="width:${perf.toFixed(1)}%;height:100%;background:#a855f7;border-radius:3px;"></div></div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px;"><span style="color:#888;">Qualidade</span><span style="color:#22c55e;font-weight:700;">${qual.toFixed(1)}%</span></div>
+            <div style="height:5px;background:#1e1e3a;border-radius:3px;"><div style="width:${qual.toFixed(1)}%;height:100%;background:#22c55e;border-radius:3px;"></div></div>
+          </div>
+        </div>
+        <div class="dash-grid" style="grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="dash-card">
+            <div class="dash-label">📦 Disponibilidade</div>
+            <div class="dash-metric" style="color:#3b82f6;">${disp.toFixed(1)}%</div>
+            <div class="dash-sub">Tempo prod. / planejado</div>
+            <div style="margin-top:10px;font-size:11px;color:#555;">
+              <div>Tempo disponível <span style="float:right;color:#888;">${(hTurno*60).toFixed(0)} min</span></div>
+              <div>Tempo de paras <span style="float:right;color:#ef4444;">${(hParada*60).toFixed(0)} min</span></div>
+              <div>Tempo efetivo <span style="float:right;color:#3b82f6;">${(hProd*60).toFixed(0)} min</span></div>
+            </div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-label">⚡ Performance</div>
+            <div class="dash-metric" style="color:#a855f7;">${perf.toFixed(1)}%</div>
+            <div class="dash-sub">Veloc. real / veloc. ideal</div>
+            <div style="margin-top:10px;font-size:11px;color:#555;">
+              <div>Produção real <span style="float:right;color:#ccc;">${volTotal.toFixed(2)} t</span></div>
+              <div>Meta <span style="float:right;color:#888;">${volMeta.toFixed(1)} t</span></div>
+              <div>Diferença <span style="float:right;color:${volTotal>=volMeta?'#22c55e':'#ef4444'};">${(volTotal-volMeta).toFixed(2)} t</span></div>
+            </div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-label">✅ Qualidade</div>
+            <div class="dash-metric" style="color:#22c55e;">${qual.toFixed(1)}%</div>
+            <div class="dash-sub">Peças boas / total</div>
+            <div style="margin-top:10px;font-size:11px;color:#555;">
+              <div>Produção boa <span style="float:right;color:#ccc;">${(volTotal-volRejeito).toFixed(2)} t</span></div>
+              <div>Defeitos/sucata <span style="float:right;color:#ef4444;">${volRejeito.toFixed(3)} t</span></div>
+              <div>Taxa de rejeito <span style="float:right;color:#888;">${volTotal>0?(volRejeito/volTotal*100).toFixed(2):0}%</span></div>
+            </div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-label">🚛 Produção</div>
+            <div class="dash-metric" style="color:#f59e0b;">${volTotal.toFixed(2)}</div>
+            <div class="dash-sub" style="color:#f59e0b;">toneladas</div>
+            <div style="margin-top:10px;">
+              <div style="font-size:11px;color:#555;margin-bottom:4px;">Meta ${volMeta.toFixed(1)} t (${volMeta>0?(volTotal/volMeta*100).toFixed(0):0}%)</div>
+              <div style="height:6px;background:#1e1e3a;border-radius:3px;"><div style="width:${Math.min(volTotal/volMeta*100,100).toFixed(1)}%;height:100%;background:#f59e0b;border-radius:3px;"></div></div>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="card">
-        <div class="card-title">Todos os sequenciamentos de hoje (${rows.length})</div>
-        ${!rows.length?'<div class="empty">Nenhum sequenciamento ainda hoje.</div>':
-        rows.map(r=>`<div class="row">
-          <div class="row-head"><strong>${r.ordem_processo}</strong>${statusBadge(r)}<span style="font-size:11px;color:var(--text3);">${(r.hora_inicio||'').slice(0,5)}</span></div>
-          <div class="row-sub">${r.produto||'-'} · Volume: ${r.volume_produzido??'-'}</div>
-        </div>`).join('')}
+
+      <!-- LINHA 2: Sparkline + Tempo de paros + Turnos avaliados -->
+      <div class="dash-grid dash-grid-3" style="margin-bottom:12px;">
+        <div class="dash-card" style="grid-column:span 2;">
+          <div class="dash-label" style="margin-bottom:12px;">📈 Tendência de produção — por hora</div>
+          <div style="height:70px;">${sparkline(rows)}</div>
+          <div style="display:flex;gap:16px;margin-top:8px;font-size:10px;color:#555;">
+            <span style="color:#3b82f6;">— Volume</span>
+            <span style="color:#22c55e;">- - Meta 85%</span>
+          </div>
+        </div>
+        <div class="dash-grid" style="gap:12px;">
+          <div class="dash-card">
+            <div class="dash-label">⏱ Tempo de paros</div>
+            <div class="dash-metric" style="color:#f59e0b;">${(hParada*60).toFixed(0)}</div>
+            <div class="dash-sub">minutos · ${topParadas.length} tipos de eventos</div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-label">🔄 Status atual</div>
+            <div class="dash-metric" style="color:${emProd>0?'#22c55e':'#ef4444'};">${emProd>0?'EM PROD.':'PARADA'}</div>
+            <div class="dash-sub">${emProd} ordem(ns) ativa(s)</div>
+          </div>
+        </div>
       </div>
-      <div class="alert alert-info" style="margin-top:16px;">${icons.info}<span>O cruzamento com o SAP (ordens marcadas x banco, com apuração de sobra diária) entra na próxima etapa — o motor Python de comparação e o relatório de fechamento semanal.</span></div>
-    `;
-  }catch(e){c.innerHTML=`<div class="alert alert-err">${icons.err}<span>Erro: ${e.message}</span></div>`}
+
+      <!-- LINHA 3: Pareto de paradas + Turnos -->
+      <div class="dash-grid dash-grid-2" style="margin-bottom:12px;">
+        <div class="dash-card">
+          <div class="dash-label" style="margin-bottom:12px;">⚠️ Pareto de paradas</div>
+          ${!topParadas.length?'<div style="color:#555;font-size:12px;text-align:center;padding:20px;">Nenhuma parada registrada</div>':
+          topParadas.map(([mot,h])=>`
+            <div style="margin-bottom:10px;">
+              <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;">
+                <span style="color:#ccc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:70%;">${mot}</span>
+                <span style="color:${PLANEJADAS_DASH.includes(mot)?'#888':'#ef4444'};font-weight:600;">${(h*60).toFixed(0)}min</span>
+              </div>
+              <div style="height:6px;background:#1e1e3a;border-radius:3px;">
+                <div style="width:${totalParadaH>0?(h/totalParadaH*100).toFixed(1):0}%;height:100%;background:${PLANEJADAS_DASH.includes(mot)?'#374151':'#ef4444'};border-radius:3px;transition:width .5s;"></div>
+              </div>
+            </div>`).join('')}
+        </div>
+        <div class="dash-card">
+          <div class="dash-label" style="margin-bottom:12px;">🕐 Desdobramento por turno</div>
+          ${!Object.keys(turnos).length?'<div style="color:#555;font-size:12px;text-align:center;padding:20px;">Sem dados de turno</div>':
+          Object.values(turnos).map(t=>{
+            const vT=t.prod.reduce((s,r)=>s+(r.volume_produzido||0),0);
+            const hT=t.prod.reduce((s,r)=>s+calcDurH(r.hora_inicio,r.hora_fim),0);
+            const dT=hTurno>0?Math.min(hT/hTurno*100,100):0;
+            const pT=hT>0?Math.min(vT/(hT*PADRAO_TH)*100,100):0;
+            const oT=dT*pT/100;
+            const oTColor=oT>=85?'#22c55e':oT>=65?'#f59e0b':'#ef4444';
+            const oTLabel=oT>=85?'Aceitável':oT>=65?'Aceitável':'Crítico';
+            return `<div style="border:1px solid #1e1e3a;border-radius:8px;padding:12px;margin-bottom:8px;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+                <div>
+                  <div style="font-size:13px;font-weight:700;color:#ccc;">${t.nome}</div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-size:20px;font-weight:800;color:${oTColor};">${oT.toFixed(2)}%</div>
+                  <div style="font-size:10px;color:${oTColor};">${oTLabel}</div>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;text-align:center;">
+                <div><div style="font-size:12px;font-weight:700;color:#3b82f6;">${dT.toFixed(1)}%</div><div style="font-size:9px;color:#555;">Disp.</div></div>
+                <div><div style="font-size:12px;font-weight:700;color:#a855f7;">${pT.toFixed(1)}%</div><div style="font-size:9px;color:#555;">Rend.</div></div>
+                <div><div style="font-size:12px;font-weight:700;color:#22c55e;">100%</div><div style="font-size:9px;color:#555;">Cal.</div></div>
+              </div>
+              <div style="font-size:11px;color:#555;">
+                <div>Produção <span style="float:right;color:#888;">${vT.toFixed(2)} t</span></div>
+                <div>Meta <span style="float:right;color:#555;">${volMeta.toFixed(1)} t</span></div>
+              </div>
+              <div style="height:4px;background:#1e1e3a;border-radius:2px;margin-top:8px;"><div style="width:${Math.min(vT/volMeta*100,100).toFixed(1)}%;height:100%;background:${oTColor};border-radius:2px;"></div></div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- LINHA 4: Meta de produção -->
+      <div class="dash-card">
+        <div class="dash-label" style="margin-bottom:12px;">🎯 Meta de produção</div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;">
+          <span style="color:#888;">Peso real: <strong style="color:#ccc;">${volTotal.toFixed(3)} t</strong></span>
+          <span style="color:#888;">Meta: <strong style="color:#ccc;">${volMeta.toFixed(1)} t</strong></span>
+        </div>
+        <div style="height:12px;background:#1e1e3a;border-radius:6px;overflow:hidden;margin-bottom:6px;">
+          <div style="width:${Math.min(volTotal/volMeta*100,100).toFixed(1)}%;height:100%;background:linear-gradient(90deg,#3b82f6,${oeeColor});border-radius:6px;transition:width .8s;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:#555;">
+          <span style="color:${oeeColor};font-weight:700;">${volMeta>0?(volTotal/volMeta*100).toFixed(1):0}% alcançado</span>
+          <span>- ${Math.max(volMeta-volTotal,0).toFixed(2)} t faltantes</span>
+        </div>
+      </div>
+    </div>`;
+  }catch(e){c.innerHTML=`<div style="color:#ef4444;padding:20px;">Erro: ${e.message}</div>`}
 }
+
 
 /* ================================================================
    ABA OEE — EFICIÊNCIA GLOBAL DOS EQUIPAMENTOS
@@ -1516,124 +1894,157 @@ async function renderOEE(c){
     const filtro = session.master
       ? `/api/apontamentos?data=${hoje}&order=maquina_nome.asc,turno.asc`
       : `/api/apontamentos?maquina_id=${session.maquina_id}&data=${hoje}&order=turno.asc`;
-
     const rows = await apiGet(filtro);
 
-    const grupos = {};
-    rows.forEach(r=>{
-      const key = `${r.maquina_id}__${r.turno||'Sem turno'}`;
-      if(!grupos[key]) grupos[key]={maquina_nome:r.maquina_nome,turno:r.turno||'Sem turno',registros:[]};
-      grupos[key].registros.push(r);
-    });
-
-    const horasTurno = {
-      '1ºT - 07:00/16:48':8.6,'2ºT - 15:30/00:54':8.1,
-      '3ºT - 23:30/08:12':7.3,'Adm - 07:00/16:48':9.8
-    };
     const PADRAO_TH = 18.8;
-    const planejadas = ['Sobreposição Turno','Limpeza Semanal','Linha Não Programada para Operar',
+    const PL = ['Sobreposição Turno','Limpeza Semanal','Linha Não Programada para Operar',
       'Manutenção Preventiva','Parada de Manutenção Anual','Refeição','DDS','Reuniões e Treinamentos'];
 
     function calcDurH(hi,hf){
       if(!hi||!hf) return 0;
-      const [hh,mm]=hi.split(':').map(Number), [eh,em]=hf.split(':').map(Number);
-      let diff=(eh*60+em)-(hh*60+mm); if(diff<0) diff+=1440; return diff/60;
+      const [hh,mm]=hi.split(':').map(Number),[eh,em]=hf.split(':').map(Number);
+      let d=(eh*60+em)-(hh*60+mm); if(d<0)d+=1440; return d/60;
     }
 
-    function gauge(val,label,color){
-      const r=26,circ=2*Math.PI*r,offset=circ*(1-val/100);
-      return `<div style="text-align:center;flex:1;">
-        <svg width="70" height="70" viewBox="0 0 70 70">
-          <circle cx="35" cy="35" r="${r}" fill="none" stroke="var(--border2)" stroke-width="7"/>
-          <circle cx="35" cy="35" r="${r}" fill="none" stroke="${color}" stroke-width="7"
-            stroke-dasharray="${circ.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"
-            stroke-linecap="round" transform="rotate(-90 35 35)"/>
-          <text x="35" y="39" text-anchor="middle" font-size="12" font-weight="700" fill="${color}">${val.toFixed(0)}%</text>
-        </svg>
-        <div style="font-size:11px;color:var(--text2);margin-top:2px;">${label}</div>
+    // Agrupa por máquina+turno
+    const grupos={};
+    rows.forEach(r=>{
+      const key=`${r.maquina_id}__${r.turno||'Sem turno'}`;
+      if(!grupos[key]) grupos[key]={maquina_nome:r.maquina_nome,turno:r.turno||'Sem turno',registros:[]};
+      grupos[key].registros.push(r);
+    });
+
+    const horasTurno={'1ºT - 07:00/16:48':8.6,'2ºT - 15:30/00:54':8.1,'3ºT - 23:30/08:12':7.3,'Adm - 07:00/16:48':9.8};
+
+    function barGauge(val,color,label){
+      return `<div style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;">
+          <span style="color:#888;">${label}</span>
+          <span style="color:${color};font-weight:700;">${val.toFixed(1)}%</span>
+        </div>
+        <div style="height:7px;background:#1e1e3a;border-radius:4px;overflow:hidden;">
+          <div style="width:${Math.min(val,100).toFixed(1)}%;height:100%;background:${color};border-radius:4px;"></div>
+        </div>
       </div>`;
     }
 
     function oeeCard(key){
-      const g=grupos[key], recs=g.registros, hTurno=horasTurno[g.turno]||8;
-      const hProd=recs.filter(r=>r.status==='produzido'&&r.tipo_registro==='producao'&&r.hora_fim).reduce((s,r)=>s+calcDurH(r.hora_inicio,r.hora_fim),0);
-      const volTotal=recs.filter(r=>r.status==='produzido').reduce((s,r)=>s+(r.volume_produzido||0),0);
+      const g=grupos[key],recs=g.registros,hTurno=horasTurno[g.turno]||8;
+      const prodF=recs.filter(r=>r.status==='produzido'&&r.tipo_registro==='producao'&&r.hora_fim);
+      const hProd=prodF.reduce((s,r)=>s+calcDurH(r.hora_inicio,r.hora_fim),0);
+      const volTotal=prodF.reduce((s,r)=>s+(r.volume_produzido||0),0);
       const volRejeito=recs.reduce((s,r)=>s+(r.rejeito_ton||0),0);
-      const hParadaNP=recs.filter(r=>r.status==='parada'&&r.hora_fim&&!planejadas.includes(r.cod_parada)).reduce((s,r)=>s+calcDurH(r.hora_inicio,r.hora_fim),0);
-      const hParadaP=recs.filter(r=>r.status==='parada'&&r.hora_fim&&planejadas.includes(r.cod_parada)).reduce((s,r)=>s+calcDurH(r.hora_inicio,r.hora_fim),0);
+      const paradaF=recs.filter(r=>r.status==='parada'&&r.hora_fim);
+      const hParNP=paradaF.filter(r=>!PL.includes(r.cod_parada)).reduce((s,r)=>s+calcDurH(r.hora_inicio,r.hora_fim),0);
+      const hParP=paradaF.filter(r=>PL.includes(r.cod_parada)).reduce((s,r)=>s+calcDurH(r.hora_inicio,r.hora_fim),0);
       const disp=hTurno>0?Math.min(hProd/hTurno*100,100):0;
       const perf=hProd>0?Math.min(volTotal/(hProd*PADRAO_TH)*100,100):0;
       const qual=volTotal>0?(volTotal-volRejeito)/volTotal*100:100;
       const oee=disp*perf*qual/10000;
-      const oeeColor=oee>=85?'#22c55e':oee>=65?'#f59e0b':'#CA2535';
+      const oeeColor=oee>=85?'#22c55e':oee>=65?'#f59e0b':'#ef4444';
+      const oeeLabel=oee>=85?'Excelente':oee>=65?'Aceitável':'Crítico';
 
       const paradaMap={};
-      recs.filter(r=>r.status==='parada'&&r.hora_fim).forEach(r=>{
-        const mot=r.cod_parada||'Sem motivo';
-        paradaMap[mot]=(paradaMap[mot]||0)+calcDurH(r.hora_inicio,r.hora_fim);
-      });
-      const paradas=Object.entries(paradaMap).sort((a,b)=>b[1]-a[1]);
-      const totalParada=paradas.reduce((s,[,h])=>s+h,0);
+      paradaF.forEach(r=>{ const m=r.cod_parada||'Sem motivo'; paradaMap[m]=(paradaMap[m]||0)+calcDurH(r.hora_inicio,r.hora_fim); });
+      const topP=Object.entries(paradaMap).sort((a,b)=>b[1]-a[1]).slice(0,5);
+      const totP=topP.reduce((s,[,h])=>s+h,0);
 
-      return `<div class="card" style="margin-bottom:16px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+      // Sparkline por hora
+      const hData=Array.from({length:24},(_,i)=>{
+        const hr=prodF.filter(r=>r.hora_inicio&&parseInt(r.hora_inicio)===i);
+        return hr.reduce((s,r)=>s+(r.volume_produzido||0),0);
+      });
+      const maxH=Math.max(...hData,0.1);
+      const pts=hData.map((v,i)=>`${(i/23*280).toFixed(1)},${(40-v/maxH*36).toFixed(1)}`).join(' ');
+
+      return `<div style="background:#12122a;border:1px solid #1e1e3a;border-radius:12px;padding:16px;margin-bottom:12px;">
+        <!-- Header -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
           <div>
-            <div class="card-title" style="margin:0;">${g.maquina_nome}</div>
-            <div style="font-size:12px;color:var(--text3);">${g.turno} · ${hoje}</div>
+            <div style="font-size:15px;font-weight:700;color:#e0e0e0;">${g.maquina_nome}</div>
+            <div style="font-size:11px;color:#555;">${g.turno} · ${hoje}</div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <div style="font-size:28px;font-weight:800;color:${oeeColor};">${oee.toFixed(1)}%</div>
-            <div style="font-size:11px;color:var(--text3);">OEE<br>Global</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:8px;justify-content:space-around;margin-bottom:16px;flex-wrap:wrap;">
-          ${gauge(disp,'Disponibilidade','#3b82f6')}
-          ${gauge(perf,'Performance','#8b5cf6')}
-          ${gauge(qual,'Qualidade','#22c55e')}
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;">
-          <div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:18px;font-weight:700;color:var(--text);">${hProd.toFixed(1)}h</div>
-            <div style="font-size:10px;color:var(--text3);">Horas produzindo</div>
-          </div>
-          <div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:18px;font-weight:700;color:var(--text);">${volTotal.toFixed(2)}t</div>
-            <div style="font-size:10px;color:var(--text3);">Volume produzido</div>
-          </div>
-          <div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:18px;font-weight:700;color:var(--amber-text);">${hParadaNP.toFixed(1)}h</div>
-            <div style="font-size:10px;color:var(--text3);">Paradas não plan.</div>
-          </div>
-          <div style="background:var(--surface2);border-radius:8px;padding:10px;text-align:center;">
-            <div style="font-size:18px;font-weight:700;color:var(--text3);">${hParadaP.toFixed(1)}h</div>
-            <div style="font-size:10px;color:var(--text3);">Paradas plan.</div>
+          <div style="text-align:right;">
+            <div style="font-size:32px;font-weight:900;color:${oeeColor};line-height:1;">${oee.toFixed(1)}%</div>
+            <div style="font-size:11px;color:${oeeColor};">${oeeLabel}</div>
           </div>
         </div>
-        ${paradas.length?`
-        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;">Pareto de paradas</div>
-        ${paradas.map(([mot,h])=>`
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-            <div style="font-size:12px;color:var(--text);width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${mot}</div>
-            <div style="flex:1;background:var(--border2);border-radius:4px;height:8px;overflow:hidden;">
-              <div style="width:${totalParada>0?(h/totalParada*100).toFixed(1):0}%;height:100%;background:${planejadas.includes(mot)?'var(--text3)':'var(--brand)'};border-radius:4px;"></div>
-            </div>
-            <div style="font-size:12px;color:var(--text2);width:40px;text-align:right;">${h.toFixed(1)}h</div>
-          </div>`).join('')}`:'<div class="empty">Nenhuma parada registrada.</div>'}
+
+        <!-- Barras OEE -->
+        <div style="margin-bottom:16px;">
+          ${barGauge(disp,'#3b82f6','Disponibilidade')}
+          ${barGauge(perf,'#a855f7','Performance')}
+          ${barGauge(qual,'#22c55e','Qualidade')}
+        </div>
+
+        <!-- Métricas -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;">
+          <div style="background:#0d0d1a;border-radius:8px;padding:10px;text-align:center;">
+            <div style="font-size:16px;font-weight:700;color:#3b82f6;">${hProd.toFixed(1)}h</div>
+            <div style="font-size:9px;color:#555;text-transform:uppercase;">Horas prod.</div>
+          </div>
+          <div style="background:#0d0d1a;border-radius:8px;padding:10px;text-align:center;">
+            <div style="font-size:16px;font-weight:700;color:#f59e0b;">${volTotal.toFixed(2)}t</div>
+            <div style="font-size:9px;color:#555;text-transform:uppercase;">Volume</div>
+          </div>
+          <div style="background:#0d0d1a;border-radius:8px;padding:10px;text-align:center;">
+            <div style="font-size:16px;font-weight:700;color:#ef4444;">${(hParNP*60).toFixed(0)}min</div>
+            <div style="font-size:9px;color:#555;text-transform:uppercase;">Paradas NP</div>
+          </div>
+          <div style="background:#0d0d1a;border-radius:8px;padding:10px;text-align:center;">
+            <div style="font-size:16px;font-weight:700;color:#374151;">${(hParP*60).toFixed(0)}min</div>
+            <div style="font-size:9px;color:#555;text-transform:uppercase;">Paradas Plan.</div>
+          </div>
+        </div>
+
+        <!-- Sparkline + Pareto -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div>
+            <div style="font-size:10px;color:#555;text-transform:uppercase;margin-bottom:6px;">Tendência por hora</div>
+            <svg width="100%" viewBox="0 0 280 44" preserveAspectRatio="none" style="display:block;height:44px;">
+              <polyline points="${pts}" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div>
+            <div style="font-size:10px;color:#555;text-transform:uppercase;margin-bottom:6px;">Pareto de paradas</div>
+            ${!topP.length?'<div style="color:#555;font-size:11px;">Sem paradas</div>':
+            topP.map(([mot,h])=>`
+              <div style="margin-bottom:5px;">
+                <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px;">
+                  <span style="color:#999;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:75%;">${mot}</span>
+                  <span style="color:${PL.includes(mot)?'#555':'#ef4444'};font-weight:600;">${(h*60).toFixed(0)}m</span>
+                </div>
+                <div style="height:4px;background:#1e1e3a;border-radius:2px;">
+                  <div style="width:${totP>0?(h/totP*100).toFixed(1):0}%;height:100%;background:${PL.includes(mot)?'#374151':'#ef4444'};border-radius:2px;"></div>
+                </div>
+              </div>`).join('')}
+          </div>
+        </div>
       </div>`;
     }
 
     const cards=Object.keys(grupos).map(oeeCard).join('');
     c.innerHTML=`
+    <div style="background:#0d0d1a;min-height:100vh;padding:20px 24px;box-sizing:border-box;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-        <p class="section-title" style="margin:0;">OEE — ${session.master?'Todos os maquinários':session.maquina_nome} — ${hoje}</p>
-        <button class="btn-export" onclick="renderOEE(document.getElementById('tab-content'))">🔄 Atualizar</button>
+        <div>
+          <div style="font-size:15px;font-weight:700;color:#e0e0e0;">⚡ OEE — ${session.master?'Todos os maquinários':session.maquina_nome}</div>
+          <div style="font-size:11px;color:#555;">Eficiência Global dos Equipamentos · ${hoje}</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <div style="background:#12122a;border:1px solid #1e1e3a;border-radius:8px;padding:8px 14px;font-size:11px;color:#888;">
+            📊 Padrão: <strong style="color:#ccc;">${PADRAO_TH} t/h</strong> · Meta: <strong style="color:#22c55e;">≥ 85%</strong>
+          </div>
+          <button onclick="renderOEE(document.getElementById('tab-content'))"
+            style="padding:8px 14px;background:#1e1e3a;border:1px solid #333;border-radius:8px;color:#888;font-size:12px;cursor:pointer;">🔄</button>
+        </div>
       </div>
-      <div style="background:var(--surface2);border-radius:8px;padding:10px 16px;margin-bottom:16px;font-size:12px;color:var(--text2);">
-        📊 Padrão: <strong>${PADRAO_TH} t/h</strong> · Meta OEE: <strong>≥ 85%</strong> 🟢 · Entre 65–84% 🟡 · Abaixo de 65% 🔴
-      </div>
-      ${!Object.keys(grupos).length?'<div class="empty">Nenhum apontamento registrado hoje para calcular OEE.</div>':cards}`;
-  }catch(e){c.innerHTML=`<div class="alert alert-err">${icons.err}<span>Erro: ${e.message}</span></div>`}
+      ${!Object.keys(grupos).length?
+        '<div style="text-align:center;padding:40px;color:#555;">Nenhum apontamento registrado hoje para calcular OEE.</div>':cards}
+    </div>`;
+  }catch(e){c.innerHTML=`<div style="color:#ef4444;padding:20px;">Erro: ${e.message}</div>`}
 }
+
 
 /* ================================================================
    ABA 4 — RELATORIO
@@ -1644,18 +2055,17 @@ async function renderRelatorio(c){
   setLoading(c);
   try{
     const hoje=new Date().toISOString().split('T')[0];
-    // master vê tudo; operador vê só sua máquina
-    // Inclui registros de qualquer data, não filtra por data
+    // master vê tudo (qualquer data); operador comum só vê/exporta o dia de hoje, na própria máquina
     const params = session.master
       ? `/api/apontamentos?order=data.desc,hora_inicio.desc`
-      : `/api/apontamentos?maquina_id=${session.maquina_id}&order=data.desc,hora_inicio.desc`;
+      : `/api/apontamentos?maquina_id=${session.maquina_id}&data=${hoje}&order=hora_inicio.desc`;
 
     const rows=await apiGet(params);
     window._relatorioData=rows;
 
     const titulo = session.master
       ? `Relatório consolidado — todos os maquinários (${rows.length})`
-      : `Relatório — ${session.maquina_nome} (${rows.length})`;
+      : `Relatório — ${session.maquina_nome} · hoje (${fmtDate(hoje)}) (${rows.length})`;
 
     c.innerHTML=`
       <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
