@@ -113,7 +113,7 @@ code,.mono{font-family:'DM Mono',monospace;font-size:12px}
 .sidebar-item:hover{background:var(--sidebar-bg2);color:#fff}
 .sidebar-item.active{background:var(--brand);color:#fff;font-weight:600;box-shadow:0 4px 14px rgba(202,37,53,0.35)}
 .sidebar-item-icon{display:flex;flex-shrink:0}
-.sidebar.collapsed .sidebar-item{justify-content:center;padding:11px 0}
+.sidebar.collapsed .sidebar-item{justify-content:center;padding:11px 0} 
 .sidebar.collapsed .sidebar-item-label{display:none}
 
 .sidebar-foot{
@@ -827,17 +827,6 @@ function renderForm(c){
       <div id="save-msg"></div>
     </div>
 
-    <div class="card">
-      <div class="card-title">Parada geral <span class="badge b-parada" style="margin-left:6px;">sem ordem de produção</span></div>
-      <div class="row-sub" style="margin-bottom:14px;">Para paradas que não envolvem uma ordem específica — almoço, limpeza, manutenção preventiva, troca de turno, etc.</div>
-      <div class="grid2">
-        <div class="field"><label>Código de parada</label><input type="text" id="pg-cod" placeholder="Ex: P100"></div>
-        <div class="field"><label>Observação (opcional)</label><input type="text" id="pg-obs" placeholder="Ex: Parada para almoço"></div>
-      </div>
-      <button class="btn-primary" style="width:auto;background:var(--amber-text);" onclick="registrarParadaGeral()">Iniciar parada geral</button>
-      <div id="pg-msg"></div>
-    </div>
-
     <div id="preseq-wrap"></div>
     <div id="abertas-wrap"></div>`;
   renderAbertas(document.getElementById('abertas-wrap'));
@@ -962,33 +951,7 @@ async function registrar(){
   }
 }
 
-/* Salva uma parada geral (almoco, limpeza, manutencao) sem vincular a nenhuma ordem */
-async function registrarParadaGeral(){
-  const cod=document.getElementById('pg-cod').value.trim();
-  const obs=document.getElementById('pg-obs').value.trim();
-  const msg=document.getElementById('pg-msg');
-  if(!cod){
-    msg.innerHTML=`<div class="alert alert-err">${icons.err}<span>Informe o código de parada.</span></div>`;
-    return;
-  }
-  const payload={
-    usuario_id:session.usuario_id, maquina_id:session.maquina_id, turno:session.turno, supervisor_id:session.supervisor_id,
-    operador_nome:session.nome, supervisor_nome:session.supervisor_nome, maquina_nome:session.maquina_nome,
-    data:new Date().toISOString().split('T')[0],
-    hora_inicio:nowHM(),
-    cod_parada:cod,
-    observacao:obs,
-    status:'em_producao',
-    tipo_registro:'parada_geral'
-  };
-  try{
-    await apiPost('/api/apontamentos', payload);
-    renderForm(document.getElementById('tab-content'));
-    document.getElementById('pg-msg').innerHTML=`<div class="alert alert-info">${icons.info}<span>Parada geral registrada.</span></div>`;
-  }catch(e){
-    msg.innerHTML=`<div class="alert alert-err">${icons.err}<span>Erro ao salvar: ${e.message}</span></div>`;
-  }
-}
+
 
 /* ================================================================
    PAINEL DE CONTROLE DO TURNO
@@ -1202,9 +1165,18 @@ function abrirRegistroParada(idOrdem, tipo){
       <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;">🔴 Registrar parada</div>
       <div class="grid2">
         <div class="field"><label>Hora início da parada</label><input type="time" id="rp-hi-${idOrdem}" value="${nowHM()}"></div>
-        <div class="field"><label>Motivo</label>${motivosSelect('rp-mot-'+idOrdem)}</div>
+        <div class="field"><label>Lado parado</label>
+          <select id="rp-ensaque-${idOrdem}" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:8px;font-size:13px;background:var(--surface);">
+            <option value="ambos">Ambos os lados</option>
+            <option value="Ensaque 1">Somente Ensaque 1</option>
+            <option value="Ensaque 2">Somente Ensaque 2</option>
+          </select>
+        </div>
       </div>
-      <div class="field"><label>Observação (opcional)</label><input type="text" id="rp-obs-${idOrdem}" placeholder="Detalhes adicionais"></div>
+      <div class="grid2">
+        <div class="field"><label>Motivo</label>${motivosSelect('rp-mot-'+idOrdem)}</div>
+        <div class="field"><label>Observação (opcional)</label><input type="text" id="rp-obs-${idOrdem}" placeholder="Detalhes adicionais"></div>
+      </div>
       <div style="display:flex;gap:8px;margin-top:10px;">
         <button class="btn-primary" style="width:auto;background:var(--amber-text);padding:7px 16px;" onclick="confirmarParadaOrdem('${idOrdem}')">
           Confirmar parada
@@ -1217,12 +1189,16 @@ function abrirRegistroParada(idOrdem, tipo){
     </div>`;
 }
 
-/* Confirma a parada: fecha a ordem atual e cria parada de máquina */
+/* Confirma a parada: fecha a ordem atual e cria parada(s) de máquina por ensaque */
 async function confirmarParadaOrdem(idOrdem){
-  const hi   = document.getElementById('rp-hi-'+idOrdem)?.value;
-  const mot  = document.getElementById('rp-mot-'+idOrdem)?.value;
-  const obs  = document.getElementById('rp-obs-'+idOrdem)?.value.trim();
+  const hi      = document.getElementById('rp-hi-'+idOrdem)?.value;
+  const mot     = document.getElementById('rp-mot-'+idOrdem)?.value;
+  const obs     = document.getElementById('rp-obs-'+idOrdem)?.value.trim();
+  const ensaqSel= document.getElementById('rp-ensaque-'+idOrdem)?.value || 'ambos';
   if(!mot){alert('Selecione o motivo de parada.');return}
+
+  const lados = ensaqSel === 'ambos' ? ['Ensaque 1','Ensaque 2'] : [ensaqSel];
+  const classe = PLANEJADAS.includes(mot)?'Planejada':'Não planejada';
 
   try{
     // 1. Fecha a ordem em produção com hora_fim = hora início da parada
@@ -1231,22 +1207,25 @@ async function confirmarParadaOrdem(idOrdem){
       status: 'parada',
       cod_parada: mot,
       motivo_parada: mot,
-      classe_parada: PLANEJADAS.includes(mot)?'Planejada':'Não planejada',
+      classe_parada: classe,
       observacao: obs||undefined
     });
 
-    // 2. Cria registro de parada da máquina
-    await apiPost('/api/apontamentos', {
-      data:          new Date().toISOString().split('T')[0],
-      hora_inicio:   hi,
-      cod_parada:    mot,
-      motivo_parada: mot,
-      classe_parada: PLANEJADAS.includes(mot)?'Planejada':'Não planejada',
-      observacao:    obs||'',
-      status:        'em_producao',
-      tipo_registro: 'parada_maquina',
-      retomada_de:   idOrdem,
-    });
+    // 2. Cria um registro de parada para cada lado selecionado
+    for(const lado of lados){
+      await apiPost('/api/apontamentos', {
+        data:          new Date().toISOString().split('T')[0],
+        hora_inicio:   hi,
+        ensaque:       lado,
+        cod_parada:    mot,
+        motivo_parada: mot,
+        classe_parada: classe,
+        observacao:    obs||'',
+        status:        'em_producao',
+        tipo_registro: 'parada_maquina',
+        retomada_de:   idOrdem,
+      });
+    }
 
     renderAbertas(document.getElementById('abertas-wrap'));
   }catch(e){alert('Erro ao registrar parada: '+e.message)}
@@ -1263,9 +1242,18 @@ function abrirParadaMaquina(){
     <div class="card-title">🔴 Registrar parada de máquina</div>
     <div class="grid2">
       <div class="field"><label>Hora início</label><input type="time" id="pm-hi" value="${nowHM()}"></div>
-      <div class="field"><label>Motivo</label>${motivosSelect('pm-mot')}</div>
+      <div class="field"><label>Lado parado</label>
+        <select id="pm-ensaque" style="width:100%;padding:8px 10px;border:1px solid var(--border2);border-radius:8px;font-size:13px;background:var(--surface);">
+          <option value="ambos">Ambos os lados</option>
+          <option value="Ensaque 1">Somente Ensaque 1</option>
+          <option value="Ensaque 2">Somente Ensaque 2</option>
+        </select>
+      </div>
     </div>
-    <div class="field"><label>Observação (opcional)</label><input type="text" id="pm-obs" placeholder="Detalhes adicionais"></div>
+    <div class="grid2">
+      <div class="field"><label>Motivo</label>${motivosSelect('pm-mot')}</div>
+      <div class="field"><label>Observação (opcional)</label><input type="text" id="pm-obs" placeholder="Detalhes adicionais"></div>
+    </div>
     <div style="display:flex;gap:8px;margin-top:10px;">
       <button class="btn-primary" style="width:auto;background:var(--brand);padding:7px 16px;" onclick="confirmarParadaMaquina()">
         Confirmar parada
@@ -1279,21 +1267,29 @@ function abrirParadaMaquina(){
 }
 
 async function confirmarParadaMaquina(){
-  const hi  = document.getElementById('pm-hi')?.value;
-  const mot = document.getElementById('pm-mot')?.value;
-  const obs = document.getElementById('pm-obs')?.value.trim();
+  const hi       = document.getElementById('pm-hi')?.value;
+  const mot      = document.getElementById('pm-mot')?.value;
+  const obs      = document.getElementById('pm-obs')?.value.trim();
+  const ensaqSel = document.getElementById('pm-ensaque')?.value || 'ambos';
   if(!mot){alert('Selecione o motivo de parada.');return}
+
+  const lados  = ensaqSel === 'ambos' ? ['Ensaque 1','Ensaque 2'] : [ensaqSel];
+  const classe = PLANEJADAS.includes(mot)?'Planejada':'Não planejada';
+
   try{
-    await apiPost('/api/apontamentos',{
-      data:          new Date().toISOString().split('T')[0],
-      hora_inicio:   hi,
-      cod_parada:    mot,
-      motivo_parada: mot,
-      classe_parada: PLANEJADAS.includes(mot)?'Planejada':'Não planejada',
-      observacao:    obs||'',
-      status:        'em_producao',
-      tipo_registro: 'parada_maquina',
-    });
+    for(const lado of lados){
+      await apiPost('/api/apontamentos',{
+        data:          new Date().toISOString().split('T')[0],
+        hora_inicio:   hi,
+        ensaque:       lado,
+        cod_parada:    mot,
+        motivo_parada: mot,
+        classe_parada: classe,
+        observacao:    obs||'',
+        status:        'em_producao',
+        tipo_registro: 'parada_maquina',
+      });
+    }
     renderAbertas(document.getElementById('abertas-wrap'));
   }catch(e){alert('Erro: '+e.message)}
 }
