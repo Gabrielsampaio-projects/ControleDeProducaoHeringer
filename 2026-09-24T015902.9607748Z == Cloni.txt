@@ -1,0 +1,90 @@
+2026-09-24T01:59:02.9607748Z ==> Cloning from https://github.com/Gabrielsampaio-projects/ControleDeProducaoHeringer
+2026-09-24T01:59:03.539738938Z ==> Checking out commit b3514c8db00562d9849844816bad7f19481f7433 in branch main
+2026-09-24T01:59:04.359284026Z ==> Using Python version 3.14.3 (default)
+2026-09-24T01:59:04.359294216Z ==> Docs on specifying a Python version: https://render.com/docs/python-version
+2026-09-24T01:59:04.359450248Z ==> Installing Python version 3.14.3...
+2026-09-24T01:59:07.883951174Z ==> Using Poetry version 2.1.3 (default)
+2026-09-24T01:59:07.923463434Z ==> Docs on specifying a Poetry version: https://render.com/docs/poetry-version
+2026-09-24T01:59:07.978139228Z ==> Running build command 'pip install -r requirements.txt'...
+2026-09-24T01:59:08.431664926Z Collecting fastapi==0.115.0 (from -r requirements.txt (line 1))
+2026-09-24T01:59:08.513005454Z   Downloading fastapi-0.115.0-py3-none-any.whl.metadata (27 kB)
+2026-09-24T01:59:08.556471872Z Collecting uvicorn==0.30.6 (from uvicorn[standard]==0.30.6->-r requirements.txt (line 2))
+2026-09-24T01:59:08.564891593Z   Downloading uvicorn-0.30.6-py3-none-any.whl.metadata (6.6 kB)
+2026-09-24T01:59:08.588523809Z Collecting httpx==0.27.2 (from -r requirements.txt (line 3))
+2026-09-24T01:59:08.596996953Z   Downloading httpx-0.27.2-py3-none-any.whl.metadata (7.1 kB)
+2026-09-24T01:59:08.614492215Z Collecting python-jose==3.3.0 (from python-jose[cryptography]==3.3.0->-r requirements.txt (line 4))
+2026-09-24T01:59:08.622900524Z   Downloading python_jose-3.3.0-py2.py3-none-any.whl.metadata (5.4 kB)
+2026-09-24T01:59:08.644523292Z Collecting PyJWT==2.9.0 (from -r requirements.txt (line 5))
+2026-09-24T01:59:08.652648813Z   Downloading PyJWT-2.9.0-py3-none-any.whl.metadata (3.0 kB)
+2026-09-24T01:59:08.671688558Z Collecting python-dotenv==1.0.1 (from -r requirements.txt (line 6))
+2026-09-24T01:59:08.680081706Z   Downloading python_dotenv-1.0.1-py3-none-any.whl.metadata (23 kB)
+2026-09-24T01:59:08.806212118Z Collecting pandas==2.2.3 (from -r requirements.txt (line 7))
+2026-09-24T01:59:08.817869198Z   Downloading pandas-2.2.3.tar.gz (4.4 MB)
+2026-09-24T01:59:09.0479482Z      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.4/4.4 MB 20.7 MB/s  0:00:00
+2026-09-24T01:59:09.372860752Z   Installing build dependencies: started
+2026-09-24T01:59:11.589318357Z   Installing build dependencies: finished with status 'done'
+2026-09-24T01:59:11.58986521Z   Getting requirements to build wheel: started
+2026-09-24T01:59:14.903088832Z   Getting requirements to build wheel: finished with status 'done'
+2026-09-24T01:59:14.904369865Z   Installing backend dependencies: started
+2026-09-24T01:59:15.511632125Z   Installing backend dependencies: finished with status 'done'
+2026-09-24T01:59:15.512227839Z   Preparing metadata (pyproject.toml): started
+2026-09-24T02:00:16.490402551Z   Preparing metadata (pyproject.toml): still running...
+2026-09-24T02:01:17.4902017Z   Preparing metadata (pyproject.toml): still running...
+2026-09-24T02:02:18.395252376Z   Preparing metadata (pyproject.toml): still running...
+2026-09-24T02:03:21.794813879Z   Preparing metadata (pyproject.toml): still running...
+2026-09-24T02:04:30.315279881Z   Preparing metadata (pyproject.toml): still running...
+2026-09-24T02:05:14.450290252Z   Preparing metadata (pyproject.toml): finished with status 'done'
+2026-09-24T02:05:14.497894595Z Collecting openpyxl==3.1.5 (from -r requirements.txt (line 8))
+2026-09-24T02:05:14.506480578Z   Downloading openpyxl-3.1.5-py2.py3-none-any.whl.metadata (2.5 kB)
+2026-09-24T02:05:14.526039955Z Collecting python-multipart==0.0.9 (from -r requirements.txt (line 9))
+2026-09-24T02:05:14.535155173Z   Downloading python_multipart-0.0.9-py3-none-any.whl.metadata (2.5 kB)
+2026-09-24T02:05:14.68125205Z Collecting pydantic==2.9.2 (from -r requirements.txt (line 10))
+2026-09-24T02:05:14.690223316Z   Downloading pydantic-2.9.2-py3-none-any.whl.metadata (149 kB)
+2026-09-24T02:05:14.7389644Z Collecting starlette<0.39.0,>=0.37.2 (from fastapi==0.115.0->-r requirements.txt (line 1))
+2026-09-24T02:05:14.747950302Z   Downloading starlette-0.38.6-py3-none-any.whl.metadata (6.0 kB)
+2026-09-24T02:05:14.786378606Z Collecting typing-extensions>=4.8.0 (from fastapi==0.115.0->-r requirements.txt (line 1))
+2026-09-24T02:05:14.797077463Z   Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+2026-09-24T02:05:14.812227Z Collecting annotated-types>=0.6.0 (from pydantic==2.9.2->-r requirements.txt (line 10))
+2026-09-24T02:05:14.820653724Z   Downloading annotated_types-0.8.0-py3-none-any.whl.metadata (15 kB)
+2026-09-24T02:05:15.503663301Z Collecting pydantic-core==2.23.4 (from pydantic==2.9.2->-r requirements.txt (line 10))
+2026-09-24T02:05:15.51447881Z   Downloading pydantic_core-2.23.4.tar.gz (402 kB)
+2026-09-24T02:05:15.577636166Z   Installing build dependencies: started
+2026-09-24T02:05:16.765634592Z   Installing build dependencies: finished with status 'done'
+2026-09-24T02:05:16.766091995Z   Getting requirements to build wheel: started
+2026-09-24T02:05:16.821995723Z   Getting requirements to build wheel: finished with status 'done'
+2026-09-24T02:05:16.822804834Z   Preparing metadata (pyproject.toml): started
+2026-09-24T02:05:17.317265639Z   Preparing metadata (pyproject.toml): finished with status 'error'
+2026-09-24T02:05:17.320320051Z   error: subprocess-exited-with-error
+2026-09-24T02:05:17.320332146Z   
+2026-09-24T02:05:17.320334589Z   × Preparing metadata (pyproject.toml) did not run successfully.
+2026-09-24T02:05:17.320336649Z   │ exit code: 1
+2026-09-24T02:05:17.320338297Z   ╰─> [14 lines of output]
+2026-09-24T02:05:17.32033972Z           Updating crates.io index
+2026-09-24T02:05:17.320341532Z       warning: failed to write cache, path: /usr/local/cargo/registry/index/index.crates.io-1949cf8c6b5b557f/.cache/3/h/hex, error: Read-only file system (os error 30)
+2026-09-24T02:05:17.320343286Z        Downloading crates ...
+2026-09-24T02:05:17.320344619Z         Downloaded itoa v1.0.11
+2026-09-24T02:05:17.320346431Z       error: failed to create directory `/usr/local/cargo/registry/cache/index.crates.io-1949cf8c6b5b557f`
+2026-09-24T02:05:17.320347804Z       
+2026-09-24T02:05:17.320355428Z       Caused by:
+2026-09-24T02:05:17.320356975Z         Read-only file system (os error 30)
+2026-09-24T02:05:17.320358346Z       💥 maturin failed
+2026-09-24T02:05:17.320360026Z         Caused by: Cargo metadata failed. Does your crate compile with `cargo build`?
+2026-09-24T02:05:17.320361608Z         Caused by: `cargo metadata` exited with an error:
+2026-09-24T02:05:17.320363343Z       Error running maturin: Command '['maturin', 'pep517', 'write-dist-info', '--metadata-directory', '/tmp/pip-modern-metadata-oneunh9g', '--interpreter', '/opt/render/project/src/.venv/bin/python3.14']' returned non-zero exit status 1.
+2026-09-24T02:05:17.320364871Z       Checking for Rust toolchain....
+2026-09-24T02:05:17.320366495Z       Running `maturin pep517 write-dist-info --metadata-directory /tmp/pip-modern-metadata-oneunh9g --interpreter /opt/render/project/src/.venv/bin/python3.14`
+2026-09-24T02:05:17.320367746Z       [end of output]
+2026-09-24T02:05:17.320369018Z   
+2026-09-24T02:05:17.320370473Z   note: This error originates from a subprocess, and is likely not a problem with pip.
+2026-09-24T02:05:17.446013106Z 
+2026-09-24T02:05:17.446021783Z [notice] A new release of pip is available: 25.3 -> 26.2.1
+2026-09-24T02:05:17.446023376Z [notice] To update, run: pip install --upgrade pip
+2026-09-24T02:05:17.447191831Z error: metadata-generation-failed
+2026-09-24T02:05:17.447195651Z 
+2026-09-24T02:05:17.447197312Z × Encountered error while generating package metadata.
+2026-09-24T02:05:17.447199042Z ╰─> pydantic-core
+2026-09-24T02:05:17.44720053Z 
+2026-09-24T02:05:17.447202474Z note: This is an issue with the package mentioned above, not pip.
+2026-09-24T02:05:17.447204358Z hint: See above for details.
+2026-09-24T02:05:17.767460751Z ==> Build failed 😞
+2026-09-24T02:05:17.767470325Z ==> Common ways to troubleshoot your deploy: https://render.com/docs/troubleshooting-deploys
